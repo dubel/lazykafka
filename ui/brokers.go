@@ -7,20 +7,35 @@ import (
 )
 
 type BrokersPanel struct {
-	App  *App
-	View *tview.List
+	App      *App
+	View     tview.Primitive
+	ListView *tview.List
 }
 
 func NewBrokersPanel(app *App) *BrokersPanel {
+	listView := tview.NewList()
+
+	footer := tview.NewTextView().
+		SetText("(a)dd | (r)emove | (enter) to connect").
+		SetTextAlign(tview.AlignCenter).
+		SetDynamicColors(true)
+
+	flex := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(listView, 0, 1, true).
+		AddItem(footer, 1, 0, false)
+
+	flex.SetBorder(true).SetTitle("Brokers (F1)")
+
 	p := &BrokersPanel{
-		App:  app,
-		View: tview.NewList(),
+		App:      app,
+		View:     flex,
+		ListView: listView,
 	}
-	p.View.SetBorder(true).SetTitle("Brokers (F1)")
 
 	p.refreshList()
 
-	p.View.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	p.ListView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyDelete || event.Rune() == 'r' {
 			p.removeCurrentBroker()
 			return nil
@@ -32,7 +47,7 @@ func NewBrokersPanel(app *App) *BrokersPanel {
 }
 
 func (p *BrokersPanel) refreshList() {
-	p.View.Clear()
+	p.ListView.Clear()
 
 	// Load brokers from config
 	for i, b := range p.App.Config.Brokers {
@@ -45,7 +60,7 @@ func (p *BrokersPanel) refreshList() {
 			displayText += " [" + broker.Alias + "]"
 		}
 
-		p.View.AddItem(displayText, "", 0, func() {
+		p.ListView.AddItem(displayText, "", 0, func() {
 			// On select, connect to broker
 			p.resetStatuses()
 
@@ -53,15 +68,15 @@ func (p *BrokersPanel) refreshList() {
 			if broker.Alias != "" {
 				statusText += " [" + broker.Alias + "]"
 			}
-			p.View.SetItemText(index, statusText+" (connecting...)", "")
+			p.ListView.SetItemText(index, statusText+" (connecting...)", "")
 
 			go func() {
 				err := p.App.ConnectToBroker(broker.Address)
 				p.App.TviewApp.QueueUpdateDraw(func() {
 					if err != nil {
-						p.View.SetItemText(index, statusText+" (failed to connect !!)", "")
+						p.ListView.SetItemText(index, statusText+" (failed to connect !!)", "")
 					} else {
-						p.View.SetItemText(index, statusText+" (connected)", "")
+						p.ListView.SetItemText(index, statusText+" (connected)", "")
 						p.App.TviewApp.SetFocus(p.App.TopicsPanel.View)
 					}
 				})
@@ -69,7 +84,7 @@ func (p *BrokersPanel) refreshList() {
 		})
 	}
 
-	p.View.AddItem("Add New", "Add a new broker", 'a', func() {
+	p.ListView.AddItem("Add New", "Add a new broker", 'a', func() {
 		p.showAddBrokerModal()
 	})
 }
@@ -95,7 +110,7 @@ func (p *BrokersPanel) showAddBrokerModal() {
 			// Auto-connect to the new broker
 			// The new broker is at the end of the list (before "Add New")
 			newIdx := len(p.App.Config.Brokers) - 1
-			p.View.SetCurrentItem(newIdx)
+			p.ListView.SetCurrentItem(newIdx)
 			// Trigger the selected function manually?
 			// tview doesn't expose a way to trigger the selected function programmatically easily without calling it directly.
 			// But we can just replicate the connect logic or let the user press enter.
@@ -128,7 +143,7 @@ func (p *BrokersPanel) showAddBrokerModal() {
 }
 
 func (p *BrokersPanel) removeCurrentBroker() {
-	idx := p.View.GetCurrentItem()
+	idx := p.ListView.GetCurrentItem()
 	if idx < len(p.App.Config.Brokers) {
 		// Remove from config using index
 		p.App.Config.Brokers = append(p.App.Config.Brokers[:idx], p.App.Config.Brokers[idx+1:]...)
@@ -144,6 +159,6 @@ func (p *BrokersPanel) resetStatuses() {
 		if b.Alias != "" {
 			text += " [" + b.Alias + "]"
 		}
-		p.View.SetItemText(i, text, "")
+		p.ListView.SetItemText(i, text, "")
 	}
 }
