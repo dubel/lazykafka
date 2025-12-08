@@ -3,6 +3,7 @@ package ui
 import (
 	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -16,7 +17,16 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 		App:  app,
 		View: tview.NewList(),
 	}
-	p.View.SetBorder(true).SetTitle("Topics (F2)")
+	p.View.SetBorder(true).
+		SetTitle("Topics (F2)").
+		SetBorderColor(tcell.ColorWhite)
+
+	p.View.SetFocusFunc(func() {
+		p.View.SetBorderColor(tcell.ColorGreen)
+	})
+	p.View.SetBlurFunc(func() {
+		p.View.SetBorderColor(tcell.ColorWhite)
+	})
 
 	p.View.SetSelectedFunc(func(i int, s1, s2 string, r rune) {
 		app.ConsumePanel.StartConsuming(s1)

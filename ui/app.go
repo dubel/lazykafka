@@ -66,11 +66,12 @@ func (a *App) setupNavigation() {
 		// Tab cycling
 		if event.Key() == tcell.KeyTab {
 			focus := a.TviewApp.GetFocus()
-			if focus == a.BrokersPanel.View {
+			// Check if focus is on any component within the panels
+			if focus == a.BrokersPanel.View || focus == a.BrokersPanel.ListView {
 				a.TviewApp.SetFocus(a.TopicsPanel.View)
 			} else if focus == a.TopicsPanel.View {
 				a.TviewApp.SetFocus(a.ConsumePanel.View)
-			} else if focus == a.ConsumePanel.View {
+			} else if focus == a.ConsumePanel.View || focus == a.ConsumePanel.TextView {
 				a.TviewApp.SetFocus(a.ProducePanel.View)
 			} else {
 				a.TviewApp.SetFocus(a.BrokersPanel.View)

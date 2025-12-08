@@ -16,8 +16,17 @@ func NewProducePanel(app *App) *ProducePanel {
 		App:  app,
 		View: tview.NewInputField(),
 	}
-	p.View.SetBorder(true).SetTitle("Produce (F4)")
+	p.View.SetBorder(true).
+		SetTitle("Produce (F4)").
+		SetBorderColor(tcell.ColorWhite)
 	p.View.SetLabel("Message: ")
+
+	p.View.SetFocusFunc(func() {
+		p.View.SetBorderColor(tcell.ColorGreen)
+	})
+	p.View.SetBlurFunc(func() {
+		p.View.SetBorderColor(tcell.ColorWhite)
+	})
 
 	p.View.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {

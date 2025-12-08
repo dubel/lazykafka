@@ -25,7 +25,17 @@ func NewBrokersPanel(app *App) *BrokersPanel {
 		AddItem(listView, 0, 1, true).
 		AddItem(footer, 1, 0, false)
 
-	flex.SetBorder(true).SetTitle("Brokers (F1)")
+	flex.SetBorder(true).
+		SetTitle("Brokers (F1)").
+		SetBorderColor(tcell.ColorWhite).
+		SetBorderAttributes(tcell.AttrNone)
+
+	flex.SetFocusFunc(func() {
+		flex.SetBorderColor(tcell.ColorGreen)
+	})
+	flex.SetBlurFunc(func() {
+		flex.SetBorderColor(tcell.ColorWhite)
+	})
 
 	p := &BrokersPanel{
 		App:      app,

@@ -34,7 +34,16 @@ func NewConsumePanel(app *App) *ConsumePanel {
 		AddItem(textView, 0, 1, true).
 		AddItem(footer, 1, 0, false)
 
-	flex.SetBorder(true).SetTitle("Consume (F3)")
+	flex.SetBorder(true).
+		SetTitle("Consume (F3)").
+		SetBorderColor(tcell.ColorWhite)
+
+	flex.SetFocusFunc(func() {
+		flex.SetBorderColor(tcell.ColorGreen)
+	})
+	flex.SetBlurFunc(func() {
+		flex.SetBorderColor(tcell.ColorWhite)
+	})
 
 	p := &ConsumePanel{
 		App:      app,
