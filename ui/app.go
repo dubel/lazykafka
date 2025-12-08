@@ -1,6 +1,9 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/dubel/lazykafka/config"
 	"github.com/dubel/lazykafka/kafka"
 	"github.com/gdamore/tcell/v2"
@@ -97,6 +100,12 @@ func (a *App) setupNavigation() {
 			return nil
 		}
 
+		// Log viewer
+		if event.Rune() == 'l' {
+			a.showLogViewer()
+			return nil
+		}
+
 		return event
 	})
 }
@@ -126,4 +135,38 @@ func (a *App) ConnectToBroker(broker string) error {
 	a.KafkaManager = manager
 	a.TopicsPanel.LoadTopics()
 	return nil
+}
+
+func (a *App) showLogViewer() {
+	home, _ := os.UserHomeDir()
+	logFile := filepath.Join(home, ".lazykafka", "app.log")
+
+	// Read log file
+	content, err := os.ReadFile(logFile)
+	logText := string(content)
+	if err != nil {
+		logText = "No log file found or error reading log: " + err.Error()
+	}
+
+	textView := tview.NewTextView().
+		SetText(logText).
+		SetScrollable(true).
+		SetDynamicColors(true)
+
+	textView.SetBorder(true).
+		SetTitle("Application Log (press 'l' or Esc to close)").
+		SetTitleAlign(tview.AlignCenter)
+
+	// Handle key presses
+	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape || event.Rune() == 'l' {
+			a.InModal = false
+			a.TviewApp.SetRoot(a.Grid, true)
+			return nil
+		}
+		return event
+	})
+
+	a.InModal = true
+	a.TviewApp.SetRoot(textView, true)
 }
