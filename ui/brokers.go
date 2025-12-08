@@ -107,6 +107,19 @@ func (p *BrokersPanel) showAddBrokerModal() {
 			p.App.TviewApp.SetRoot(p.App.Grid, true)
 		})
 
+	// Enable Tab and arrow key navigation
+	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyDown, tcell.KeyTab:
+			// Move to next field/button
+			return tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+		case tcell.KeyUp, tcell.KeyBacktab:
+			// Move to previous field/button
+			return tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone)
+		}
+		return event
+	})
+
 	form.SetBorder(true).SetTitle("Add Broker").SetTitleAlign(tview.AlignCenter)
 	p.App.TviewApp.SetRoot(form, true)
 }
