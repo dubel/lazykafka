@@ -84,7 +84,7 @@ func (p *BrokersPanel) refreshList() {
 
 			statusText := broker.Address
 			if broker.Alias != "" {
-				statusText += " [" + broker.Alias + "]"
+				statusText += " (" + broker.Alias + ")"
 			}
 			p.ListView.SetItemText(index, statusText+" (connecting...)", "")
 
@@ -92,9 +92,9 @@ func (p *BrokersPanel) refreshList() {
 				err := p.App.ConnectToBroker(broker.Address)
 				p.App.TviewApp.QueueUpdateDraw(func() {
 					if err != nil {
-						p.ListView.SetItemText(index, statusText+" (failed to connect !!)", "")
+						p.ListView.SetItemText(index, statusText+" **failed to connect!!**)", "")
 					} else {
-						p.ListView.SetItemText(index, statusText+" (connected)", "")
+						p.ListView.SetItemText(index, statusText+" >>connected<<)", "")
 						p.App.TviewApp.SetFocus(p.App.TopicsPanel.View)
 					}
 				})

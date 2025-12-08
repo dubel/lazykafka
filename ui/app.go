@@ -100,6 +100,18 @@ func (a *App) setupNavigation() {
 }
 
 func (a *App) ConnectToBroker(broker string) error {
+	// Stop any active consumption
+	if a.ConsumePanel.StopChan != nil {
+		close(a.ConsumePanel.StopChan)
+		a.ConsumePanel.StopChan = nil
+	}
+
+	// Clear the consume panel
+	a.TviewApp.QueueUpdateDraw(func() {
+		a.ConsumePanel.TextView.Clear()
+		a.ConsumePanel.CurrentTopic = ""
+	})
+
 	if a.KafkaManager != nil {
 		a.KafkaManager.Close()
 	}
