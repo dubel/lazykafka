@@ -54,22 +54,37 @@ func (a *App) Run() error {
 
 func (a *App) setupNavigation() {
 	a.TviewApp.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Modifiers()&tcell.ModCtrl != 0 {
-			switch event.Rune() {
-			case '1':
-				a.TviewApp.SetFocus(a.BrokersPanel.View)
-				return nil
-			case '2':
+		// Tab cycling
+		if event.Key() == tcell.KeyTab {
+			focus := a.TviewApp.GetFocus()
+			if focus == a.BrokersPanel.View {
 				a.TviewApp.SetFocus(a.TopicsPanel.View)
-				return nil
-			case '3':
+			} else if focus == a.TopicsPanel.View {
 				a.TviewApp.SetFocus(a.ConsumePanel.View)
-				return nil
-			case '4':
+			} else if focus == a.ConsumePanel.View {
 				a.TviewApp.SetFocus(a.ProducePanel.View)
-				return nil
+			} else {
+				a.TviewApp.SetFocus(a.BrokersPanel.View)
 			}
+			return nil
 		}
+
+		// Direct navigation
+		switch event.Name() {
+		case "Ctrl+1":
+			a.TviewApp.SetFocus(a.BrokersPanel.View)
+			return nil
+		case "Ctrl+2":
+			a.TviewApp.SetFocus(a.TopicsPanel.View)
+			return nil
+		case "Ctrl+3":
+			a.TviewApp.SetFocus(a.ConsumePanel.View)
+			return nil
+		case "Ctrl+4":
+			a.TviewApp.SetFocus(a.ProducePanel.View)
+			return nil
+		}
+
 		return event
 	})
 }
