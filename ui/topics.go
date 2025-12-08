@@ -90,23 +90,29 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 }
 
 func (p *TopicsPanel) LoadTopics() {
+	log.Println("LoadTopics: Starting refresh")
 	if p.App.KafkaManager == nil {
+		log.Println("LoadTopics: KafkaManager is nil")
 		return
 	}
 
+	log.Println("LoadTopics: Listing topics from client")
 	topics, err := p.App.KafkaManager.Client.ListTopics()
 	if err != nil {
-		log.Println("Failed to list topics:", err)
-		// Handle error
+		log.Println("LoadTopics: Failed to list topics:", err)
 		return
 	}
+	log.Printf("LoadTopics: Found %d topics", len(topics))
 
 	p.App.TviewApp.QueueUpdateDraw(func() {
+		log.Println("LoadTopics: Updating UI list")
 		p.ListView.Clear()
 		for _, t := range topics {
 			p.ListView.AddItem(t, "", 0, nil)
 		}
+		log.Println("LoadTopics: UI update complete")
 	})
+	log.Println("LoadTopics: Queued UI update")
 }
 
 func (p *TopicsPanel) showCreateTopicModal() {
