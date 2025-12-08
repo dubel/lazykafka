@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"log"
 	"os"
 
 	"github.com/dubel/lazykafka/config"
@@ -110,8 +111,11 @@ func (a *App) setupNavigation() {
 }
 
 func (a *App) ConnectToBroker(broker string) error {
+	log.Printf("ConnectToBroker: Starting connection to broker: %s", broker)
+
 	// Stop any active consumption
 	if a.ConsumePanel.StopChan != nil {
+		log.Println("ConnectToBroker: Stopping active consumption")
 		close(a.ConsumePanel.StopChan)
 		a.ConsumePanel.StopChan = nil
 	}
@@ -121,6 +125,7 @@ func (a *App) ConnectToBroker(broker string) error {
 		a.ConsumePanel.TextView.Clear()
 		a.ConsumePanel.CurrentTopic = ""
 	})
+	log.Println("ConnectToBroker: Cleared consume panel")
 
 	// Clear the produce panel
 	a.TviewApp.QueueUpdateDraw(func() {
@@ -130,18 +135,24 @@ func (a *App) ConnectToBroker(broker string) error {
 			flex.SetTitle("Produce (F4)")
 		}
 	})
+	log.Println("ConnectToBroker: Cleared produce panel")
 
 	if a.KafkaManager != nil {
+		log.Println("ConnectToBroker: Closing existing Kafka manager")
 		a.KafkaManager.Close()
 	}
 
+	log.Printf("ConnectToBroker: Creating new Kafka manager for broker: %s", broker)
 	manager, err := kafka.NewManager([]string{broker})
 	if err != nil {
+		log.Printf("ConnectToBroker: ERROR - Failed to create Kafka manager: %v", err)
 		return err
 	}
 
 	a.KafkaManager = manager
+	log.Println("ConnectToBroker: Successfully connected, loading topics")
 	a.TopicsPanel.LoadTopics()
+	log.Println("ConnectToBroker: Connection complete")
 	return nil
 }
 

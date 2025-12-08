@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -80,7 +81,10 @@ func NewConsumePanel(app *App) *ConsumePanel {
 }
 
 func (p *ConsumePanel) StartConsuming(topic string) {
+	log.Printf("StartConsuming: Starting consumption for topic: %s, FromBeginning: %v", topic, p.FromBeginning)
+
 	if p.StopChan != nil {
+		log.Println("StartConsuming: Stopping previous consumption")
 		close(p.StopChan)
 		p.StopChan = nil
 	}
@@ -90,6 +94,7 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 	p.TextView.SetTitle(fmt.Sprintf("Consume (F3) - %s", topic))
 
 	if p.App.KafkaManager == nil {
+		log.Println("StartConsuming: ERROR - KafkaManager is nil, cannot consume")
 		return
 	}
 
@@ -98,19 +103,27 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 	errors := make(chan error)
 
 	go p.App.KafkaManager.ConsumeTopic(topic, p.FromBeginning, messages, errors, p.StopChan)
+	log.Printf("StartConsuming: Started consuming messages from topic: %s", topic)
 
 	go func() {
+		messageCount := 0
 		for {
 			select {
 			case msg := <-messages:
+				messageCount++
+				if messageCount%100 == 0 {
+					log.Printf("StartConsuming: Received %d messages from topic: %s", messageCount, topic)
+				}
 				p.App.TviewApp.QueueUpdateDraw(func() {
 					fmt.Fprintln(p.TextView, msg)
 				})
 			case err := <-errors:
+				log.Printf("StartConsuming: ERROR - Consumption error for topic %s: %v", topic, err)
 				p.App.TviewApp.QueueUpdateDraw(func() {
 					fmt.Fprintf(p.TextView, "[red]Error: %v[white]\n", err)
 				})
 			case <-p.StopChan:
+				log.Printf("StartConsuming: Stopped consuming from topic: %s (received %d messages)", topic, messageCount)
 				return
 			}
 		}

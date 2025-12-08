@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"log"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -55,13 +57,22 @@ func NewProducePanel(app *App) *ProducePanel {
 		if key == tcell.KeyEnter {
 			text := p.InputField.GetText()
 			if text == "" || p.CurrentTopic == "" || p.App.KafkaManager == nil {
+				if text == "" {
+					log.Println("ProduceMessage: Empty message, ignoring")
+				} else if p.CurrentTopic == "" {
+					log.Println("ProduceMessage: No topic selected, ignoring")
+				} else if p.App.KafkaManager == nil {
+					log.Println("ProduceMessage: ERROR - KafkaManager is nil")
+				}
 				return
 			}
 
+			log.Printf("ProduceMessage: Sending message to topic '%s': %s", p.CurrentTopic, text)
 			err := p.App.KafkaManager.ProduceMessage(p.CurrentTopic, text)
 			if err != nil {
-				// Show error (maybe in consume panel or a modal)
+				log.Printf("ProduceMessage: ERROR - Failed to produce message to topic '%s': %v", p.CurrentTopic, err)
 			} else {
+				log.Printf("ProduceMessage: Successfully sent message to topic '%s'", p.CurrentTopic)
 				p.InputField.SetText("")
 			}
 		}
