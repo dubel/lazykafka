@@ -3,6 +3,7 @@ package ui
 import (
 	"log"
 	"os"
+	"sync"
 
 	"github.com/dubel/lazykafka/config"
 	"github.com/dubel/lazykafka/kafka"
@@ -21,6 +22,7 @@ type App struct {
 	ProducePanel *ProducePanel
 
 	KafkaManager *kafka.Manager
+	ManagerMutex sync.RWMutex
 	InModal      bool
 }
 
@@ -137,10 +139,13 @@ func (a *App) ConnectToBroker(broker string) error {
 	})
 	log.Println("ConnectToBroker: Cleared produce panel")
 
+	a.ManagerMutex.Lock()
 	if a.KafkaManager != nil {
 		log.Println("ConnectToBroker: Closing existing Kafka manager")
 		a.KafkaManager.Close()
+		a.KafkaManager = nil
 	}
+	a.ManagerMutex.Unlock()
 
 	log.Printf("ConnectToBroker: Creating new Kafka manager for broker: %s", broker)
 	manager, err := kafka.NewManager([]string{broker})
@@ -149,7 +154,10 @@ func (a *App) ConnectToBroker(broker string) error {
 		return err
 	}
 
+	a.ManagerMutex.Lock()
 	a.KafkaManager = manager
+	a.ManagerMutex.Unlock()
+
 	log.Println("ConnectToBroker: Successfully connected, loading topics")
 	a.TopicsPanel.LoadTopics()
 	log.Println("ConnectToBroker: Connection complete")

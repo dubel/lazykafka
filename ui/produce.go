@@ -56,6 +56,8 @@ func NewProducePanel(app *App) *ProducePanel {
 	p.InputField.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {
 			text := p.InputField.GetText()
+
+			p.App.ManagerMutex.RLock()
 			if text == "" || p.CurrentTopic == "" || p.App.KafkaManager == nil {
 				if text == "" {
 					log.Println("ProduceMessage: Empty message, ignoring")
@@ -64,11 +66,14 @@ func NewProducePanel(app *App) *ProducePanel {
 				} else if p.App.KafkaManager == nil {
 					log.Println("ProduceMessage: ERROR - KafkaManager is nil")
 				}
+				p.App.ManagerMutex.RUnlock()
 				return
 			}
 
 			log.Printf("ProduceMessage: Sending message to topic '%s': %s", p.CurrentTopic, text)
 			err := p.App.KafkaManager.ProduceMessage(p.CurrentTopic, text)
+			p.App.ManagerMutex.RUnlock()
+
 			if err != nil {
 				log.Printf("ProduceMessage: ERROR - Failed to produce message to topic '%s': %v", p.CurrentTopic, err)
 			} else {

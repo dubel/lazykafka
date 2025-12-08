@@ -91,10 +91,14 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 
 func (p *TopicsPanel) LoadTopics() {
 	log.Println("LoadTopics: Starting refresh")
+
+	p.App.ManagerMutex.RLock()
 	if p.App.KafkaManager == nil {
+		p.App.ManagerMutex.RUnlock()
 		log.Println("LoadTopics: KafkaManager is nil")
 		return
 	}
+	// Keep lock held while using client
 
 	log.Println("LoadTopics: Refreshing metadata")
 	if err := p.App.KafkaManager.Client.RefreshMetadata(); err != nil {
@@ -103,6 +107,8 @@ func (p *TopicsPanel) LoadTopics() {
 
 	log.Println("LoadTopics: Listing topics from client")
 	topics, err := p.App.KafkaManager.Client.ListTopics()
+	p.App.ManagerMutex.RUnlock() // Unlock after network call
+
 	if err != nil {
 		log.Println("LoadTopics: Failed to list topics:", err)
 		return
@@ -121,9 +127,12 @@ func (p *TopicsPanel) LoadTopics() {
 }
 
 func (p *TopicsPanel) showCreateTopicModal() {
+	p.App.ManagerMutex.RLock()
 	if p.App.KafkaManager == nil {
+		p.App.ManagerMutex.RUnlock()
 		return
 	}
+	p.App.ManagerMutex.RUnlock()
 
 	form := tview.NewForm().
 		AddInputField("Topic Name", "", 30, nil, nil)
@@ -140,7 +149,16 @@ func (p *TopicsPanel) showCreateTopicModal() {
 		if topicName != "" {
 			go func() {
 				log.Println("UI: Calling KafkaManager.CreateTopic (background)")
+
+				p.App.ManagerMutex.RLock()
+				if p.App.KafkaManager == nil {
+					p.App.ManagerMutex.RUnlock()
+					log.Println("UI: KafkaManager is nil, cannot create topic")
+					return
+				}
 				err := p.App.KafkaManager.CreateTopic(topicName)
+				p.App.ManagerMutex.RUnlock()
+
 				if err != nil {
 					log.Printf("UI: Failed to create topic: %v", err)
 					p.App.TviewApp.QueueUpdateDraw(func() {
@@ -186,14 +204,19 @@ func (p *TopicsPanel) deleteSelectedTopic() {
 	log.Printf("UI: Requesting deletion of topic: %s", topicName)
 
 	go func() {
+		p.App.ManagerMutex.RLock()
 		if p.App.KafkaManager != nil {
 			err := p.App.KafkaManager.DeleteTopic(topicName)
+			p.App.ManagerMutex.RUnlock()
+
 			if err != nil {
 				log.Printf("UI: Failed to delete topic %s: %v", topicName, err)
 			} else {
 				log.Printf("UI: Successfully deleted topic: %s", topicName)
 				p.LoadTopics()
 			}
+		} else {
+			p.App.ManagerMutex.RUnlock()
 		}
 	}()
 }

@@ -93,7 +93,9 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 	p.TextView.Clear()
 	p.TextView.SetTitle(fmt.Sprintf("Consume (F3) - %s", topic))
 
+	p.App.ManagerMutex.RLock()
 	if p.App.KafkaManager == nil {
+		p.App.ManagerMutex.RUnlock()
 		log.Println("StartConsuming: ERROR - KafkaManager is nil, cannot consume")
 		return
 	}
@@ -103,6 +105,8 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 	errors := make(chan error)
 
 	go p.App.KafkaManager.ConsumeTopic(topic, p.FromBeginning, messages, errors, p.StopChan)
+	p.App.ManagerMutex.RUnlock()
+
 	log.Printf("StartConsuming: Started consuming messages from topic: %s", topic)
 
 	go func() {
