@@ -70,17 +70,17 @@ func (a *App) setupNavigation() {
 		}
 
 		// Direct navigation
-		switch event.Name() {
-		case "Ctrl+1":
+		switch event.Key() {
+		case tcell.KeyF1:
 			a.TviewApp.SetFocus(a.BrokersPanel.View)
 			return nil
-		case "Ctrl+2":
+		case tcell.KeyF2:
 			a.TviewApp.SetFocus(a.TopicsPanel.View)
 			return nil
-		case "Ctrl+3":
+		case tcell.KeyF3:
 			a.TviewApp.SetFocus(a.ConsumePanel.View)
 			return nil
-		case "Ctrl+4":
+		case tcell.KeyF4:
 			a.TviewApp.SetFocus(a.ProducePanel.View)
 			return nil
 		}

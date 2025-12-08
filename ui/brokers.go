@@ -16,7 +16,7 @@ func NewBrokersPanel(app *App) *BrokersPanel {
 		App:  app,
 		View: tview.NewList(),
 	}
-	p.View.SetBorder(true).SetTitle("Brokers [1]")
+	p.View.SetBorder(true).SetTitle("Brokers [F1]")
 
 	// Load brokers from config
 	for _, b := range app.Config.Brokers {

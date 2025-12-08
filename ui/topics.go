@@ -16,7 +16,7 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 		App:  app,
 		View: tview.NewList(),
 	}
-	p.View.SetBorder(true).SetTitle("Topics [2]")
+	p.View.SetBorder(true).SetTitle("Topics [F2]")
 
 	p.View.SetSelectedFunc(func(i int, s1, s2 string, r rune) {
 		app.ConsumePanel.StartConsuming(s1)
