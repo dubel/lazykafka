@@ -39,18 +39,29 @@ func (p *BrokersPanel) refreshList() {
 		// Capture variable for closure
 		broker := b
 		index := i
-		p.View.AddItem(broker, "", 0, func() {
+
+		displayText := broker.Address
+		if broker.Alias != "" {
+			displayText += " [" + broker.Alias + "]"
+		}
+
+		p.View.AddItem(displayText, "", 0, func() {
 			// On select, connect to broker
 			p.resetStatuses()
-			p.View.SetItemText(index, broker+" (connecting...)", "")
+
+			statusText := broker.Address
+			if broker.Alias != "" {
+				statusText += " [" + broker.Alias + "]"
+			}
+			p.View.SetItemText(index, statusText+" (connecting...)", "")
 
 			go func() {
-				err := p.App.ConnectToBroker(broker)
+				err := p.App.ConnectToBroker(broker.Address)
 				p.App.TviewApp.QueueUpdateDraw(func() {
 					if err != nil {
-						p.View.SetItemText(index, broker+" (failed to connect !!)", "")
+						p.View.SetItemText(index, statusText+" (failed to connect !!)", "")
 					} else {
-						p.View.SetItemText(index, broker+" (connected)", "")
+						p.View.SetItemText(index, statusText+" (connected)", "")
 						p.App.TviewApp.SetFocus(p.App.TopicsPanel.View)
 					}
 				})
@@ -65,12 +76,19 @@ func (p *BrokersPanel) refreshList() {
 
 func (p *BrokersPanel) showAddBrokerModal() {
 	form := tview.NewForm().
-		AddInputField("Broker Address", "localhost:9092", 20, nil, nil)
+		AddInputField("Broker Address", "localhost:9092", 20, nil, nil).
+		AddInputField("Alias (optional)", "", 20, nil, nil)
 
 	form.AddButton("Save", func() {
 		addr := form.GetFormItem(0).(*tview.InputField).GetText()
+		alias := form.GetFormItem(1).(*tview.InputField).GetText()
+
 		if addr != "" {
-			p.App.Config.Brokers = append(p.App.Config.Brokers, addr)
+			newBroker := config.Broker{
+				Address: addr,
+				Alias:   alias,
+			}
+			p.App.Config.Brokers = append(p.App.Config.Brokers, newBroker)
 			config.SaveConfig(p.App.Config)
 			p.refreshList()
 
@@ -105,6 +123,11 @@ func (p *BrokersPanel) removeCurrentBroker() {
 
 func (p *BrokersPanel) resetStatuses() {
 	for i := 0; i < len(p.App.Config.Brokers); i++ {
-		p.View.SetItemText(i, p.App.Config.Brokers[i], "")
+		b := p.App.Config.Brokers[i]
+		text := b.Address
+		if b.Alias != "" {
+			text += " [" + b.Alias + "]"
+		}
+		p.View.SetItemText(i, text, "")
 	}
 }

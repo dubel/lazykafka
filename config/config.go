@@ -6,8 +6,13 @@ import (
 	"path/filepath"
 )
 
+type Broker struct {
+	Address string `json:"address"`
+	Alias   string `json:"alias,omitempty"`
+}
+
 type Config struct {
-	Brokers []string `json:"brokers"`
+	Brokers []Broker `json:"brokers"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -20,7 +25,7 @@ func LoadConfig() (*Config, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &Config{Brokers: []string{}}, nil
+			return &Config{Brokers: []Broker{}}, nil
 		}
 		return nil, err
 	}

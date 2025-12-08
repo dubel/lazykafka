@@ -21,7 +21,10 @@ type App struct {
 }
 
 func NewApp() *App {
-	cfg, _ := config.LoadConfig() // Ignore error for now, defaults to empty
+	cfg, err := config.LoadConfig()
+	if err != nil || cfg == nil {
+		cfg = &config.Config{Brokers: []config.Broker{}}
+	}
 
 	app := &App{
 		TviewApp: tview.NewApplication(),
