@@ -16,7 +16,7 @@ func NewProducePanel(app *App) *ProducePanel {
 		App:  app,
 		View: tview.NewInputField(),
 	}
-	p.View.SetBorder(true).SetTitle("Produce [F4]")
+	p.View.SetBorder(true).SetTitle("Produce (F4)")
 	p.View.SetLabel("Message: ")
 
 	p.View.SetDoneFunc(func(key tcell.Key) {
@@ -40,5 +40,5 @@ func NewProducePanel(app *App) *ProducePanel {
 
 func (p *ProducePanel) SetTopic(topic string) {
 	p.CurrentTopic = topic
-	p.View.SetTitle("Produce [F4] - " + topic)
+	p.View.SetTitle("Produce (F4) - " + topic)
 }

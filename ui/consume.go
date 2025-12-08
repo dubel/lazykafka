@@ -20,7 +20,7 @@ func NewConsumePanel(app *App) *ConsumePanel {
 		App:  app,
 		View: tview.NewTextView(),
 	}
-	p.View.SetBorder(true).SetTitle("Consume [F3]")
+	p.View.SetBorder(true).SetTitle("Consume (F3)")
 	p.View.SetScrollable(true)
 	p.View.SetDynamicColors(true)
 	p.View.SetChangedFunc(func() {
@@ -34,7 +34,7 @@ func NewConsumePanel(app *App) *ConsumePanel {
 			if p.FromBeginning {
 				status = "From Beginning"
 			}
-			p.View.SetTitle(fmt.Sprintf("Consume [F3] (%s)", status))
+			p.View.SetTitle(fmt.Sprintf("Consume (F3) (%s)", status))
 			// Restart consumption if topic is selected
 			if p.CurrentTopic != "" {
 				p.StartConsuming(p.CurrentTopic)
@@ -55,7 +55,7 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 
 	p.CurrentTopic = topic
 	p.View.Clear()
-	p.View.SetTitle(fmt.Sprintf("Consume [F3] - %s", topic))
+	p.View.SetTitle(fmt.Sprintf("Consume (F3) - %s", topic))
 
 	if p.App.KafkaManager == nil {
 		return

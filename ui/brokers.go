@@ -16,7 +16,7 @@ func NewBrokersPanel(app *App) *BrokersPanel {
 		App:  app,
 		View: tview.NewList(),
 	}
-	p.View.SetBorder(true).SetTitle("Brokers [F1]")
+	p.View.SetBorder(true).SetTitle("Brokers (F1)")
 
 	// Load brokers from config
 	for _, b := range app.Config.Brokers {
@@ -32,7 +32,7 @@ func NewBrokersPanel(app *App) *BrokersPanel {
 		})
 	}
 
-	p.View.AddItem("Add New", "Add a new broker", 'a', func() {
+	p.View.AddItem("Add New thing aaa", "Add a new broker", 'a', func() {
 		p.showAddBrokerModal()
 	})
 
@@ -58,6 +58,7 @@ func (p *BrokersPanel) showAddBrokerModal() {
 			config.SaveConfig(p.App.Config)
 
 			// Insert before "Add New"
+			// TEST
 			count := p.View.GetItemCount()
 			p.View.InsertItem(count-1, addr, "", 0, func() {
 				if err := p.App.ConnectToBroker(addr); err == nil {
