@@ -101,9 +101,11 @@ func (p *BrokersPanel) showAddBrokerModal() {
 			// But we can just replicate the connect logic or let the user press enter.
 			// For better UX, let's just highlight it. The user can press Enter.
 		}
+		p.App.InModal = false
 		p.App.TviewApp.SetRoot(p.App.Grid, true)
 	}).
 		AddButton("Cancel", func() {
+			p.App.InModal = false
 			p.App.TviewApp.SetRoot(p.App.Grid, true)
 		})
 
@@ -121,6 +123,7 @@ func (p *BrokersPanel) showAddBrokerModal() {
 	})
 
 	form.SetBorder(true).SetTitle("Add Broker").SetTitleAlign(tview.AlignCenter)
+	p.App.InModal = true
 	p.App.TviewApp.SetRoot(form, true)
 }
 

@@ -18,6 +18,7 @@ type App struct {
 	ProducePanel *ProducePanel
 
 	KafkaManager *kafka.Manager
+	InModal      bool
 }
 
 func NewApp() *App {
@@ -57,6 +58,11 @@ func (a *App) Run() error {
 
 func (a *App) setupNavigation() {
 	a.TviewApp.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Only handle navigation when not in a modal
+		if a.InModal {
+			return event
+		}
+
 		// Tab cycling
 		if event.Key() == tcell.KeyTab {
 			focus := a.TviewApp.GetFocus()
