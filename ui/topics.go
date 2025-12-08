@@ -29,9 +29,7 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			app.TviewApp.QueueUpdateDraw(func() {
-				p.LoadTopics()
-			})
+			p.LoadTopics()
 		}
 	}()
 
@@ -49,8 +47,10 @@ func (p *TopicsPanel) LoadTopics() {
 		return
 	}
 
-	p.View.Clear()
-	for _, t := range topics {
-		p.View.AddItem(t, "", 0, nil)
-	}
+	p.App.TviewApp.QueueUpdateDraw(func() {
+		p.View.Clear()
+		for _, t := range topics {
+			p.View.AddItem(t, "", 0, nil)
+		}
+	})
 }
