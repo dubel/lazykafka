@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -102,26 +103,62 @@ func (m *Manager) getAdminConfig() *sarama.Config {
 }
 
 func (m *Manager) CreateTopic(topic string) error {
+	log.Printf("Manager.CreateTopic: Starting creation of topic '%s'", topic)
+
 	// Use a separate admin client to avoid closing the shared client
+	log.Printf("Manager.CreateTopic: Creating new ClusterAdmin connection to brokers: %v", m.Client.Brokers)
 	admin, err := sarama.NewClusterAdmin(m.Client.Brokers, m.getAdminConfig())
 	if err != nil {
+		log.Printf("Manager.CreateTopic: ERROR - Failed to create ClusterAdmin: %v", err)
 		return err
 	}
-	defer admin.Close()
+	defer func() {
+		log.Println("Manager.CreateTopic: Closing ClusterAdmin")
+		if err := admin.Close(); err != nil {
+			log.Printf("Manager.CreateTopic: Warning - Failed to close ClusterAdmin: %v", err)
+		}
+	}()
 
-	return admin.CreateTopic(topic, &sarama.TopicDetail{
+	log.Printf("Manager.CreateTopic: Sending CreateTopic request for '%s'", topic)
+	err = admin.CreateTopic(topic, &sarama.TopicDetail{
 		NumPartitions:     1,
 		ReplicationFactor: 1,
 	}, false)
+
+	if err != nil {
+		log.Printf("Manager.CreateTopic: ERROR - Failed to create topic: %v", err)
+		return err
+	}
+
+	log.Printf("Manager.CreateTopic: Successfully created topic '%s'", topic)
+	return nil
 }
 
 func (m *Manager) DeleteTopic(topic string) error {
+	log.Printf("Manager.DeleteTopic: Starting deletion of topic '%s'", topic)
+
 	// Use a separate admin client to avoid closing the shared client
+	log.Printf("Manager.DeleteTopic: Creating new ClusterAdmin connection to brokers: %v", m.Client.Brokers)
 	admin, err := sarama.NewClusterAdmin(m.Client.Brokers, m.getAdminConfig())
 	if err != nil {
+		log.Printf("Manager.DeleteTopic: ERROR - Failed to create ClusterAdmin: %v", err)
 		return err
 	}
-	defer admin.Close()
+	defer func() {
+		log.Println("Manager.DeleteTopic: Closing ClusterAdmin")
+		if err := admin.Close(); err != nil {
+			log.Printf("Manager.DeleteTopic: Warning - Failed to close ClusterAdmin: %v", err)
+		}
+	}()
 
-	return admin.DeleteTopic(topic)
+	log.Printf("Manager.DeleteTopic: Sending DeleteTopic request for '%s'", topic)
+	err = admin.DeleteTopic(topic)
+
+	if err != nil {
+		log.Printf("Manager.DeleteTopic: ERROR - Failed to delete topic: %v", err)
+		return err
+	}
+
+	log.Printf("Manager.DeleteTopic: Successfully deleted topic '%s'", topic)
+	return nil
 }

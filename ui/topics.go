@@ -119,12 +119,14 @@ func (p *TopicsPanel) showCreateTopicModal() {
 
 	form.AddButton("Create", func() {
 		topicName := form.GetFormItem(0).(*tview.InputField).GetText()
+		log.Printf("UI: Create button clicked for topic: %s", topicName)
 		if topicName != "" {
+			log.Println("UI: Calling KafkaManager.CreateTopic")
 			err := p.App.KafkaManager.CreateTopic(topicName)
 			if err != nil {
-				log.Printf("Failed to create topic: %v", err)
+				log.Printf("UI: Failed to create topic: %v", err)
 			} else {
-				log.Printf("Created topic: %s", topicName)
+				log.Printf("UI: Successfully created topic: %s", topicName)
 				p.LoadTopics()
 			}
 		}
@@ -134,6 +136,7 @@ func (p *TopicsPanel) showCreateTopicModal() {
 	})
 
 	form.AddButton("Cancel", func() {
+		log.Println("UI: Create topic cancelled")
 		p.App.InModal = false
 		p.App.TviewApp.SetRoot(p.App.Grid, true)
 		p.App.TviewApp.SetFocus(p.View)
@@ -161,13 +164,14 @@ func (p *TopicsPanel) deleteSelectedTopic() {
 	}
 
 	topicName, _ := p.ListView.GetItemText(idx)
+	log.Printf("UI: Requesting deletion of topic: %s", topicName)
 
 	if p.App.KafkaManager != nil {
 		err := p.App.KafkaManager.DeleteTopic(topicName)
 		if err != nil {
-			log.Printf("Failed to delete topic %s: %v", topicName, err)
+			log.Printf("UI: Failed to delete topic %s: %v", topicName, err)
 		} else {
-			log.Printf("Deleted topic: %s", topicName)
+			log.Printf("UI: Successfully deleted topic: %s", topicName)
 			p.LoadTopics()
 		}
 	}
