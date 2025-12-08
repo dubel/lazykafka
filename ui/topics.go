@@ -71,7 +71,7 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 			return nil
 		case 'f':
 			log.Println("Refreshing topics...")
-			p.LoadTopics()
+			go p.LoadTopics()
 			return nil
 		}
 		return event
@@ -94,6 +94,11 @@ func (p *TopicsPanel) LoadTopics() {
 	if p.App.KafkaManager == nil {
 		log.Println("LoadTopics: KafkaManager is nil")
 		return
+	}
+
+	log.Println("LoadTopics: Refreshing metadata")
+	if err := p.App.KafkaManager.Client.RefreshMetadata(); err != nil {
+		log.Printf("LoadTopics: Warning - Failed to refresh metadata: %v", err)
 	}
 
 	log.Println("LoadTopics: Listing topics from client")

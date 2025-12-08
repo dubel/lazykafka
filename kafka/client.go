@@ -43,3 +43,7 @@ func (c *Client) ListTopics() ([]string, error) {
 func (c *Client) GetPartitions(topic string) ([]int32, error) {
 	return c.saramaClient.Partitions(topic)
 }
+
+func (c *Client) RefreshMetadata() error {
+	return c.saramaClient.RefreshMetadata()
+}
