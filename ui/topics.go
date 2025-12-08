@@ -8,27 +8,50 @@ import (
 )
 
 type TopicsPanel struct {
-	App  *App
-	View *tview.List
+	App      *App
+	View     tview.Primitive
+	ListView *tview.List
 }
 
 func NewTopicsPanel(app *App) *TopicsPanel {
-	p := &TopicsPanel{
-		App:  app,
-		View: tview.NewList(),
-	}
-	p.View.SetBorder(true).
+	listView := tview.NewList()
+
+	footer := tview.NewTextView().
+		SetText("(a)dd | (r)emove | re(f)resh | (enter) to select").
+		SetTextAlign(tview.AlignCenter).
+		SetDynamicColors(true)
+
+	flex := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(listView, 0, 1, true).
+		AddItem(footer, 1, 0, false)
+
+	flex.SetBorder(true).
 		SetTitle("Topics (F2)").
 		SetBorderColor(tcell.ColorWhite)
 
-	p.View.SetFocusFunc(func() {
-		p.View.SetBorderColor(tcell.ColorGreen)
+	flex.SetFocusFunc(func() {
+		flex.SetBorderColor(tcell.ColorGreen)
 	})
-	p.View.SetBlurFunc(func() {
-		p.View.SetBorderColor(tcell.ColorWhite)
+	flex.SetBlurFunc(func() {
+		flex.SetBorderColor(tcell.ColorWhite)
 	})
 
-	p.View.SetSelectedFunc(func(i int, s1, s2 string, r rune) {
+	// Set focus handlers on the ListView to update the Flex border
+	listView.SetFocusFunc(func() {
+		flex.SetBorderColor(tcell.ColorGreen)
+	})
+	listView.SetBlurFunc(func() {
+		flex.SetBorderColor(tcell.ColorWhite)
+	})
+
+	p := &TopicsPanel{
+		App:      app,
+		View:     flex,
+		ListView: listView,
+	}
+
+	p.ListView.SetSelectedFunc(func(i int, s1, s2 string, r rune) {
 		app.ConsumePanel.StartConsuming(s1)
 		app.ProducePanel.SetTopic(s1)
 		app.TviewApp.SetFocus(app.ConsumePanel.View)
@@ -36,7 +59,7 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 
 	// Background refresh
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(300 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
 			p.LoadTopics()
@@ -58,9 +81,9 @@ func (p *TopicsPanel) LoadTopics() {
 	}
 
 	p.App.TviewApp.QueueUpdateDraw(func() {
-		p.View.Clear()
+		p.ListView.Clear()
 		for _, t := range topics {
-			p.View.AddItem(t, "", 0, nil)
+			p.ListView.AddItem(t, "", 0, nil)
 		}
 	})
 }

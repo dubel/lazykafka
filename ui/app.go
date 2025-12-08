@@ -69,7 +69,7 @@ func (a *App) setupNavigation() {
 			// Check if focus is on any component within the panels
 			if focus == a.BrokersPanel.View || focus == a.BrokersPanel.ListView {
 				a.TviewApp.SetFocus(a.TopicsPanel.View)
-			} else if focus == a.TopicsPanel.View {
+			} else if focus == a.TopicsPanel.View || focus == a.TopicsPanel.ListView {
 				a.TviewApp.SetFocus(a.ConsumePanel.View)
 			} else if focus == a.ConsumePanel.View || focus == a.ConsumePanel.TextView {
 				a.TviewApp.SetFocus(a.ProducePanel.View)
