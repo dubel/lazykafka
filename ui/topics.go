@@ -126,19 +126,27 @@ func (p *TopicsPanel) showCreateTopicModal() {
 	form.AddButton("Create", func() {
 		topicName := form.GetFormItem(0).(*tview.InputField).GetText()
 		log.Printf("UI: Create button clicked for topic: %s", topicName)
-		if topicName != "" {
-			log.Println("UI: Calling KafkaManager.CreateTopic")
-			err := p.App.KafkaManager.CreateTopic(topicName)
-			if err != nil {
-				log.Printf("UI: Failed to create topic: %v", err)
-			} else {
-				log.Printf("UI: Successfully created topic: %s", topicName)
-				p.LoadTopics()
-			}
-		}
+
+		// Close modal immediately
 		p.App.InModal = false
 		p.App.TviewApp.SetRoot(p.App.Grid, true)
 		p.App.TviewApp.SetFocus(p.View)
+
+		if topicName != "" {
+			go func() {
+				log.Println("UI: Calling KafkaManager.CreateTopic (background)")
+				err := p.App.KafkaManager.CreateTopic(topicName)
+				if err != nil {
+					log.Printf("UI: Failed to create topic: %v", err)
+					p.App.TviewApp.QueueUpdateDraw(func() {
+						// Optionally show error modal here
+					})
+				} else {
+					log.Printf("UI: Successfully created topic: %s", topicName)
+					p.LoadTopics()
+				}
+			}()
+		}
 	})
 
 	form.AddButton("Cancel", func() {
@@ -172,13 +180,15 @@ func (p *TopicsPanel) deleteSelectedTopic() {
 	topicName, _ := p.ListView.GetItemText(idx)
 	log.Printf("UI: Requesting deletion of topic: %s", topicName)
 
-	if p.App.KafkaManager != nil {
-		err := p.App.KafkaManager.DeleteTopic(topicName)
-		if err != nil {
-			log.Printf("UI: Failed to delete topic %s: %v", topicName, err)
-		} else {
-			log.Printf("UI: Successfully deleted topic: %s", topicName)
-			p.LoadTopics()
+	go func() {
+		if p.App.KafkaManager != nil {
+			err := p.App.KafkaManager.DeleteTopic(topicName)
+			if err != nil {
+				log.Printf("UI: Failed to delete topic %s: %v", topicName, err)
+			} else {
+				log.Printf("UI: Successfully deleted topic: %s", topicName)
+				p.LoadTopics()
+			}
 		}
-	}
+	}()
 }
