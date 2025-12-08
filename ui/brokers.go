@@ -45,6 +45,14 @@ func NewBrokersPanel(app *App) *BrokersPanel {
 
 	p.refreshList()
 
+	// Set focus handlers on the ListView to update the Flex border
+	p.ListView.SetFocusFunc(func() {
+		flex.SetBorderColor(tcell.ColorGreen)
+	})
+	p.ListView.SetBlurFunc(func() {
+		flex.SetBorderColor(tcell.ColorWhite)
+	})
+
 	p.ListView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyDelete || event.Rune() == 'r' {
 			p.removeCurrentBroker()

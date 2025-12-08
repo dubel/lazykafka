@@ -51,6 +51,14 @@ func NewConsumePanel(app *App) *ConsumePanel {
 		TextView: textView,
 	}
 
+	// Set focus handlers on the TextView to update the Flex border
+	p.TextView.SetFocusFunc(func() {
+		flex.SetBorderColor(tcell.ColorGreen)
+	})
+	p.TextView.SetBlurFunc(func() {
+		flex.SetBorderColor(tcell.ColorWhite)
+	})
+
 	p.TextView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Rune() == 't' {
 			p.FromBeginning = !p.FromBeginning
