@@ -62,12 +62,15 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 	p.ListView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
 		case 'a':
+			log.Println("Creating topic...")
 			p.showCreateTopicModal()
 			return nil
 		case 'r':
+			log.Println("Deleting topic...")
 			p.deleteSelectedTopic()
 			return nil
 		case 'f':
+			log.Println("Refreshing topics...")
 			p.LoadTopics()
 			return nil
 		}
@@ -93,6 +96,7 @@ func (p *TopicsPanel) LoadTopics() {
 
 	topics, err := p.App.KafkaManager.Client.ListTopics()
 	if err != nil {
+		log.Println("Failed to list topics:", err)
 		// Handle error
 		return
 	}
