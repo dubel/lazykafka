@@ -122,6 +122,15 @@ func (a *App) ConnectToBroker(broker string) error {
 		a.ConsumePanel.CurrentTopic = ""
 	})
 
+	// Clear the produce panel
+	a.TviewApp.QueueUpdateDraw(func() {
+		a.ProducePanel.InputField.SetText("")
+		a.ProducePanel.CurrentTopic = ""
+		if flex, ok := a.ProducePanel.View.(*tview.Flex); ok {
+			flex.SetTitle("Produce (F4)")
+		}
+	})
+
 	if a.KafkaManager != nil {
 		a.KafkaManager.Close()
 	}
