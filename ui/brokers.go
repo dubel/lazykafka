@@ -75,7 +75,7 @@ func (p *BrokersPanel) refreshList() {
 
 		displayText := broker.Address
 		if broker.Alias != "" {
-			displayText += " [" + broker.Alias + "]"
+			displayText += " (" + broker.Alias + ")"
 		}
 
 		p.ListView.AddItem(displayText, "", 0, func() {
