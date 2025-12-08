@@ -3,16 +3,13 @@ package main
 import (
 	"log"
 	"os"
-	"path/filepath"
 
 	"github.com/dubel/lazykafka/ui"
 )
 
 func main() {
-	// Setup logging to file
-	logDir := ".lazykafka"
-	os.MkdirAll(logDir, 0755)
-	logFile := filepath.Join(logDir, "app.log")
+	// Setup logging to file in current directory
+	logFile := "lazykafka.log"
 
 	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err == nil {

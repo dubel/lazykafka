@@ -2,7 +2,6 @@ package ui
 
 import (
 	"os"
-	"path/filepath"
 
 	"github.com/dubel/lazykafka/config"
 	"github.com/dubel/lazykafka/kafka"
@@ -138,8 +137,7 @@ func (a *App) ConnectToBroker(broker string) error {
 }
 
 func (a *App) showLogViewer() {
-	home, _ := os.UserHomeDir()
-	logFile := filepath.Join(home, ".lazykafka", "app.log")
+	logFile := "lazykafka.log"
 
 	// Read log file
 	content, err := os.ReadFile(logFile)
