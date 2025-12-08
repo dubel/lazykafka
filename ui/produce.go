@@ -7,30 +7,53 @@ import (
 
 type ProducePanel struct {
 	App          *App
-	View         *tview.InputField
+	View         tview.Primitive
+	InputField   *tview.InputField
 	CurrentTopic string
 }
 
 func NewProducePanel(app *App) *ProducePanel {
-	p := &ProducePanel{
-		App:  app,
-		View: tview.NewInputField(),
-	}
-	p.View.SetBorder(true).
+	inputField := tview.NewInputField()
+	inputField.SetLabel("Message: ")
+
+	footer := tview.NewTextView().
+		SetText("(enter) to send a message").
+		SetTextAlign(tview.AlignCenter).
+		SetDynamicColors(true)
+
+	flex := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(inputField, 0, 1, true).
+		AddItem(footer, 1, 0, false)
+
+	flex.SetBorder(true).
 		SetTitle("Produce (F4)").
 		SetBorderColor(tcell.ColorWhite)
-	p.View.SetLabel("Message: ")
 
-	p.View.SetFocusFunc(func() {
-		p.View.SetBorderColor(tcell.ColorGreen)
+	flex.SetFocusFunc(func() {
+		flex.SetBorderColor(tcell.ColorGreen)
 	})
-	p.View.SetBlurFunc(func() {
-		p.View.SetBorderColor(tcell.ColorWhite)
+	flex.SetBlurFunc(func() {
+		flex.SetBorderColor(tcell.ColorWhite)
 	})
 
-	p.View.SetDoneFunc(func(key tcell.Key) {
+	// Set focus handlers on the InputField to update the Flex border
+	inputField.SetFocusFunc(func() {
+		flex.SetBorderColor(tcell.ColorGreen)
+	})
+	inputField.SetBlurFunc(func() {
+		flex.SetBorderColor(tcell.ColorWhite)
+	})
+
+	p := &ProducePanel{
+		App:        app,
+		View:       flex,
+		InputField: inputField,
+	}
+
+	p.InputField.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {
-			text := p.View.GetText()
+			text := p.InputField.GetText()
 			if text == "" || p.CurrentTopic == "" || p.App.KafkaManager == nil {
 				return
 			}
@@ -39,7 +62,7 @@ func NewProducePanel(app *App) *ProducePanel {
 			if err != nil {
 				// Show error (maybe in consume panel or a modal)
 			} else {
-				p.View.SetText("")
+				p.InputField.SetText("")
 			}
 		}
 	})
@@ -49,5 +72,7 @@ func NewProducePanel(app *App) *ProducePanel {
 
 func (p *ProducePanel) SetTopic(topic string) {
 	p.CurrentTopic = topic
-	p.View.SetTitle("Produce (F4) - " + topic)
+	if flex, ok := p.View.(*tview.Flex); ok {
+		flex.SetTitle("Produce (F4) - " + topic)
+	}
 }

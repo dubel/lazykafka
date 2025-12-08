@@ -73,6 +73,8 @@ func (a *App) setupNavigation() {
 				a.TviewApp.SetFocus(a.ConsumePanel.View)
 			} else if focus == a.ConsumePanel.View || focus == a.ConsumePanel.TextView {
 				a.TviewApp.SetFocus(a.ProducePanel.View)
+			} else if focus == a.ProducePanel.View || focus == a.ProducePanel.InputField {
+				a.TviewApp.SetFocus(a.BrokersPanel.View)
 			} else {
 				a.TviewApp.SetFocus(a.BrokersPanel.View)
 			}
