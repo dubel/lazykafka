@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/IBM/sarama"
 )
@@ -93,8 +94,16 @@ func (m *Manager) ConsumeTopic(topic string, fromBeginning bool, messages chan<-
 	<-stop
 }
 
+func (m *Manager) getAdminConfig() *sarama.Config {
+	config := sarama.NewConfig()
+	config.Version = sarama.V2_8_0_0
+	config.Net.DialTimeout = 5 * time.Second
+	return config
+}
+
 func (m *Manager) CreateTopic(topic string) error {
-	admin, err := sarama.NewClusterAdminFromClient(m.Client.saramaClient)
+	// Use a separate admin client to avoid closing the shared client
+	admin, err := sarama.NewClusterAdmin(m.Client.Brokers, m.getAdminConfig())
 	if err != nil {
 		return err
 	}
@@ -107,7 +116,8 @@ func (m *Manager) CreateTopic(topic string) error {
 }
 
 func (m *Manager) DeleteTopic(topic string) error {
-	admin, err := sarama.NewClusterAdminFromClient(m.Client.saramaClient)
+	// Use a separate admin client to avoid closing the shared client
+	admin, err := sarama.NewClusterAdmin(m.Client.Brokers, m.getAdminConfig())
 	if err != nil {
 		return err
 	}
