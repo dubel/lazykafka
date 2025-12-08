@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"log"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -57,6 +58,22 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 		app.TviewApp.SetFocus(app.ConsumePanel.View)
 	})
 
+	// Handle key presses for add/remove/refresh
+	p.ListView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Rune() {
+		case 'a':
+			p.showCreateTopicModal()
+			return nil
+		case 'r':
+			p.deleteSelectedTopic()
+			return nil
+		case 'f':
+			p.LoadTopics()
+			return nil
+		}
+		return event
+	})
+
 	// Background refresh
 	go func() {
 		ticker := time.NewTicker(300 * time.Second)
@@ -86,4 +103,68 @@ func (p *TopicsPanel) LoadTopics() {
 			p.ListView.AddItem(t, "", 0, nil)
 		}
 	})
+}
+
+func (p *TopicsPanel) showCreateTopicModal() {
+	if p.App.KafkaManager == nil {
+		return
+	}
+
+	form := tview.NewForm().
+		AddInputField("Topic Name", "", 30, nil, nil)
+
+	form.AddButton("Create", func() {
+		topicName := form.GetFormItem(0).(*tview.InputField).GetText()
+		if topicName != "" {
+			err := p.App.KafkaManager.CreateTopic(topicName)
+			if err != nil {
+				log.Printf("Failed to create topic: %v", err)
+			} else {
+				log.Printf("Created topic: %s", topicName)
+				p.LoadTopics()
+			}
+		}
+		p.App.InModal = false
+		p.App.TviewApp.SetRoot(p.App.Grid, true)
+		p.App.TviewApp.SetFocus(p.View)
+	})
+
+	form.AddButton("Cancel", func() {
+		p.App.InModal = false
+		p.App.TviewApp.SetRoot(p.App.Grid, true)
+		p.App.TviewApp.SetFocus(p.View)
+	})
+
+	form.SetBorder(true).SetTitle("Create New Topic").SetTitleAlign(tview.AlignCenter)
+
+	// Center the form
+	flex := tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(form, 10, 1, true).
+			AddItem(nil, 0, 1, false), 40, 1, true).
+		AddItem(nil, 0, 1, false)
+
+	p.App.InModal = true
+	p.App.TviewApp.SetRoot(flex, true)
+}
+
+func (p *TopicsPanel) deleteSelectedTopic() {
+	idx := p.ListView.GetCurrentItem()
+	if idx == -1 {
+		return
+	}
+
+	topicName, _ := p.ListView.GetItemText(idx)
+
+	if p.App.KafkaManager != nil {
+		err := p.App.KafkaManager.DeleteTopic(topicName)
+		if err != nil {
+			log.Printf("Failed to delete topic %s: %v", topicName, err)
+		} else {
+			log.Printf("Deleted topic: %s", topicName)
+			p.LoadTopics()
+		}
+	}
 }

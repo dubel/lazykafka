@@ -92,3 +92,26 @@ func (m *Manager) ConsumeTopic(topic string, fromBeginning bool, messages chan<-
 
 	<-stop
 }
+
+func (m *Manager) CreateTopic(topic string) error {
+	admin, err := sarama.NewClusterAdminFromClient(m.Client.saramaClient)
+	if err != nil {
+		return err
+	}
+	defer admin.Close()
+
+	return admin.CreateTopic(topic, &sarama.TopicDetail{
+		NumPartitions:     1,
+		ReplicationFactor: 1,
+	}, false)
+}
+
+func (m *Manager) DeleteTopic(topic string) error {
+	admin, err := sarama.NewClusterAdminFromClient(m.Client.saramaClient)
+	if err != nil {
+		return err
+	}
+	defer admin.Close()
+
+	return admin.DeleteTopic(topic)
+}
