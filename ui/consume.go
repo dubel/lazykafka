@@ -9,32 +9,47 @@ import (
 
 type ConsumePanel struct {
 	App           *App
-	View          *tview.TextView
+	View          tview.Primitive
+	TextView      *tview.TextView
 	CurrentTopic  string
 	FromBeginning bool
 	StopChan      chan struct{}
 }
 
 func NewConsumePanel(app *App) *ConsumePanel {
-	p := &ConsumePanel{
-		App:  app,
-		View: tview.NewTextView(),
-	}
-	p.View.SetBorder(true).SetTitle("Consume (F3)")
-	p.View.SetScrollable(true)
-	p.View.SetDynamicColors(true)
-	p.View.SetChangedFunc(func() {
+	textView := tview.NewTextView()
+	textView.SetScrollable(true)
+	textView.SetDynamicColors(true)
+	textView.SetChangedFunc(func() {
 		app.TviewApp.Draw()
 	})
 
-	p.View.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	footer := tview.NewTextView().
+		SetText("(t)oggle from beginning").
+		SetTextAlign(tview.AlignCenter).
+		SetDynamicColors(true)
+
+	flex := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(textView, 0, 1, true).
+		AddItem(footer, 1, 0, false)
+
+	flex.SetBorder(true).SetTitle("Consume (F3)")
+
+	p := &ConsumePanel{
+		App:      app,
+		View:     flex,
+		TextView: textView,
+	}
+
+	p.TextView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Rune() == 't' {
 			p.FromBeginning = !p.FromBeginning
 			status := "New Messages"
 			if p.FromBeginning {
 				status = "From Beginning"
 			}
-			p.View.SetTitle(fmt.Sprintf("Consume (F3) (%s)", status))
+			flex.SetTitle(fmt.Sprintf("Consume (F3) (%s)", status))
 			// Restart consumption if topic is selected
 			if p.CurrentTopic != "" {
 				p.StartConsuming(p.CurrentTopic)
@@ -54,8 +69,8 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 	}
 
 	p.CurrentTopic = topic
-	p.View.Clear()
-	p.View.SetTitle(fmt.Sprintf("Consume (F3) - %s", topic))
+	p.TextView.Clear()
+	p.TextView.SetTitle(fmt.Sprintf("Consume (F3) - %s", topic))
 
 	if p.App.KafkaManager == nil {
 		return
@@ -72,11 +87,11 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 			select {
 			case msg := <-messages:
 				p.App.TviewApp.QueueUpdateDraw(func() {
-					fmt.Fprintln(p.View, msg)
+					fmt.Fprintln(p.TextView, msg)
 				})
 			case err := <-errors:
 				p.App.TviewApp.QueueUpdateDraw(func() {
-					fmt.Fprintf(p.View, "[red]Error: %v[white]\n", err)
+					fmt.Fprintf(p.TextView, "[red]Error: %v[white]\n", err)
 				})
 			case <-p.StopChan:
 				return
