@@ -2,6 +2,7 @@ package ui
 
 import (
 	"log"
+	"sort"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -133,6 +134,8 @@ func (p *TopicsPanel) LoadTopics() {
 		log.Println("LoadTopics: Failed to list topics:", err)
 		return
 	}
+
+	sort.Strings(topics)
 	log.Printf("LoadTopics: Found %d topics", len(topics))
 
 	p.App.TviewApp.QueueUpdateDraw(func() {
