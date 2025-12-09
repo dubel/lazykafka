@@ -9,9 +9,11 @@ import (
 )
 
 type TopicsPanel struct {
-	App      *App
-	View     tview.Primitive
-	ListView *tview.List
+	App        *App
+	View       tview.Primitive
+	ListView   *tview.List
+	Footer     *tview.TextView
+	ResetTimer *time.Timer
 }
 
 func NewTopicsPanel(app *App) *TopicsPanel {
@@ -50,6 +52,7 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 		App:      app,
 		View:     flex,
 		ListView: listView,
+		Footer:   footer,
 	}
 
 	p.ListView.SetSelectedFunc(func(i int, s1, s2 string, r rune) {
@@ -87,6 +90,20 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 	}()
 
 	return p
+}
+
+func (p *TopicsPanel) showTemporaryMessage(msg string, duration time.Duration) {
+	p.Footer.SetText(msg)
+
+	if p.ResetTimer != nil {
+		p.ResetTimer.Stop()
+	}
+
+	p.ResetTimer = time.AfterFunc(duration, func() {
+		p.App.TviewApp.QueueUpdateDraw(func() {
+			p.Footer.SetText("(a)dd | (r)emove | re(f)resh | (enter) to select")
+		})
+	})
 }
 
 func (p *TopicsPanel) LoadTopics() {
@@ -130,6 +147,7 @@ func (p *TopicsPanel) showCreateTopicModal() {
 	p.App.ManagerMutex.RLock()
 	if p.App.KafkaManager == nil {
 		p.App.ManagerMutex.RUnlock()
+		p.showTemporaryMessage("[red]Cannot alter Topics if we are not connected!", 5*time.Second)
 		return
 	}
 	p.App.ManagerMutex.RUnlock()
@@ -154,6 +172,9 @@ func (p *TopicsPanel) showCreateTopicModal() {
 				if p.App.KafkaManager == nil {
 					p.App.ManagerMutex.RUnlock()
 					log.Println("UI: KafkaManager is nil, cannot create topic")
+					p.App.TviewApp.QueueUpdateDraw(func() {
+						p.showTemporaryMessage("[red]Cannot alter Topics if we are not connected!", 5*time.Second)
+					})
 					return
 				}
 				err := p.App.KafkaManager.CreateTopic(topicName)
@@ -162,11 +183,14 @@ func (p *TopicsPanel) showCreateTopicModal() {
 				if err != nil {
 					log.Printf("UI: Failed to create topic: %v", err)
 					p.App.TviewApp.QueueUpdateDraw(func() {
-						// Optionally show error modal here
+						p.showTemporaryMessage("[red]Failed to create topic!", 5*time.Second)
 					})
 				} else {
 					log.Printf("UI: Successfully created topic: %s", topicName)
 					p.LoadTopics()
+					p.App.TviewApp.QueueUpdateDraw(func() {
+						p.showTemporaryMessage("[green]Topic created!", 2*time.Second)
+					})
 				}
 			}()
 		}
@@ -211,12 +235,21 @@ func (p *TopicsPanel) deleteSelectedTopic() {
 
 			if err != nil {
 				log.Printf("UI: Failed to delete topic %s: %v", topicName, err)
+				p.App.TviewApp.QueueUpdateDraw(func() {
+					p.showTemporaryMessage("[red]Failed to delete topic!", 5*time.Second)
+				})
 			} else {
 				log.Printf("UI: Successfully deleted topic: %s", topicName)
 				p.LoadTopics()
+				p.App.TviewApp.QueueUpdateDraw(func() {
+					p.showTemporaryMessage("[green]Topic deleted!", 2*time.Second)
+				})
 			}
 		} else {
 			p.App.ManagerMutex.RUnlock()
+			p.App.TviewApp.QueueUpdateDraw(func() {
+				p.showTemporaryMessage("[red]Cannot alter Topics if we are not connected!", 5*time.Second)
+			})
 		}
 	}()
 }
