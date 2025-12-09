@@ -206,19 +206,23 @@ func (p *TopicsPanel) showCreateTopicModal() {
 		p.App.TviewApp.SetFocus(p.View)
 	})
 
+	// Enable Tab and arrow key navigation
+	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyDown, tcell.KeyTab:
+			// Move to next field/button
+			return tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+		case tcell.KeyUp, tcell.KeyBacktab:
+			// Move to previous field/button
+			return tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone)
+		}
+		return event
+	})
+
 	form.SetBorder(true).SetTitle("Create New Topic").SetTitleAlign(tview.AlignCenter)
 
-	// Center the form
-	flex := tview.NewFlex().
-		AddItem(nil, 0, 1, false).
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(nil, 0, 1, false).
-			AddItem(form, 10, 1, true).
-			AddItem(nil, 0, 1, false), 40, 1, true).
-		AddItem(nil, 0, 1, false)
-
 	p.App.InModal = true
-	p.App.TviewApp.SetRoot(flex, true)
+	p.App.TviewApp.SetRoot(form, true)
 }
 
 func (p *TopicsPanel) deleteSelectedTopic() {
