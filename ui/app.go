@@ -51,7 +51,7 @@ func NewApp() *App {
 		AddItem(app.ConsumePanel.View, 1, 0, 1, 1, 0, 0, false).
 		AddItem(app.ProducePanel.View, 1, 1, 1, 1, 0, 0, false)
 
-	app.TviewApp.SetRoot(app.Grid, true).EnableMouse(!app.Config.MouseDisabled)
+	app.TviewApp.SetRoot(app.Grid, true).EnableMouse(true)
 	app.setupNavigation()
 
 	return app
@@ -105,21 +105,6 @@ func (a *App) setupNavigation() {
 		// Log viewer
 		if event.Rune() == 'l' {
 			a.showLogViewer()
-			return nil
-		}
-
-		// Toggle mouse support
-		if event.Key() == tcell.KeyCtrlM {
-			a.Config.MouseDisabled = !a.Config.MouseDisabled
-			a.TviewApp.EnableMouse(!a.Config.MouseDisabled)
-			config.SaveConfig(a.Config)
-
-			status := "Enabled"
-			if a.Config.MouseDisabled {
-				status = "Disabled"
-			}
-
-			log.Printf("Mouse support %s", status)
 			return nil
 		}
 
@@ -197,7 +182,7 @@ func (a *App) showLogViewer() {
 	textView.ScrollToEnd()
 
 	textView.SetBorder(true).
-		SetTitle("Application Log (Shift+Select to copy) (press 'l' or Esc to close)").
+		SetTitle("Application Log (press 'l' or Esc to close)").
 		SetTitleAlign(tview.AlignCenter)
 
 	// Handle key presses

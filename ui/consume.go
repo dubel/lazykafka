@@ -27,7 +27,7 @@ func NewConsumePanel(app *App) *ConsumePanel {
 	})
 
 	footer := tview.NewTextView().
-		SetText("(t)oggle from beginning | (Shift+Select to copy)").
+		SetText("(t)oggle from beginning").
 		SetTextAlign(tview.AlignCenter).
 		SetDynamicColors(true)
 

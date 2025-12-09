@@ -12,8 +12,7 @@ type Broker struct {
 }
 
 type Config struct {
-	Brokers       []Broker `json:"brokers"`
-	MouseDisabled bool     `json:"mouse_disabled"`
+	Brokers []Broker `json:"brokers"`
 }
 
 func LoadConfig() (*Config, error) {
