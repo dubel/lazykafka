@@ -113,6 +113,9 @@ func (p *TopicsPanel) LoadTopics() {
 	if p.App.KafkaManager == nil {
 		p.App.ManagerMutex.RUnlock()
 		log.Println("LoadTopics: KafkaManager is nil")
+		p.App.TviewApp.QueueUpdateDraw(func() {
+			p.showTemporaryMessage("[red]Cannot refresh Topics if we are not connected!", 5*time.Second)
+		})
 		return
 	}
 	// Keep lock held while using client
@@ -219,6 +222,17 @@ func (p *TopicsPanel) showCreateTopicModal() {
 }
 
 func (p *TopicsPanel) deleteSelectedTopic() {
+	p.App.ManagerMutex.RLock()
+	if p.App.KafkaManager == nil {
+		p.App.ManagerMutex.RUnlock()
+		p.showTemporaryMessage("[red]Cannot alter Topics if we are not connected!", 5*time.Second)
+		return
+	}
+	p.App.ManagerMutex.RUnlock()
+
+	if p.ListView.GetItemCount() == 0 {
+		return
+	}
 	idx := p.ListView.GetCurrentItem()
 	if idx == -1 {
 		return
@@ -247,6 +261,7 @@ func (p *TopicsPanel) deleteSelectedTopic() {
 			}
 		} else {
 			p.App.ManagerMutex.RUnlock()
+			// Should not be reached if initial check passes, but good for safety
 			p.App.TviewApp.QueueUpdateDraw(func() {
 				p.showTemporaryMessage("[red]Cannot alter Topics if we are not connected!", 5*time.Second)
 			})
