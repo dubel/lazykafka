@@ -22,6 +22,7 @@ func NewConsumePanel(app *App) *ConsumePanel {
 	textView.SetScrollable(true)
 	textView.SetDynamicColors(true)
 	textView.SetChangedFunc(func() {
+		textView.ScrollToEnd()
 		app.TviewApp.Draw()
 	})
 

@@ -179,6 +179,8 @@ func (a *App) showLogViewer() {
 		SetScrollable(true).
 		SetDynamicColors(true)
 
+	textView.ScrollToEnd()
+
 	textView.SetBorder(true).
 		SetTitle("Application Log (press 'l' or Esc to close)").
 		SetTitleAlign(tview.AlignCenter)
