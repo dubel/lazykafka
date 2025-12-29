@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/dubel/lazykafka/config"
+	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
 	"github.com/rivo/tview"
 )
@@ -43,7 +44,7 @@ func NewSplashPanel(app *App, settings *config.Settings) *SplashPanel {
 
 	// Form for settings
 	form := tview.NewForm().
-		AddCheckbox("Show on startup", settings.ShowSplashOnStartup, func(checked bool) {
+		AddCheckbox("Show this window on startup", settings.ShowSplashOnStartup, func(checked bool) {
 			settings.ShowSplashOnStartup = checked
 			config.SaveSettings(settings)
 		}).
@@ -57,6 +58,47 @@ func NewSplashPanel(app *App, settings *config.Settings) *SplashPanel {
 
 	form.SetButtonsAlign(tview.AlignCenter)
 	form.SetFocus(2)
+
+	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		itemIdx, btnIdx := form.GetFocusedItemIndex()
+		var currentIdx int
+		if itemIdx >= 0 {
+			currentIdx = itemIdx
+		} else if btnIdx >= 0 {
+			currentIdx = form.GetFormItemCount() + btnIdx
+		} else {
+			return event
+		}
+
+		totalItems := form.GetFormItemCount() + form.GetButtonCount()
+		if totalItems == 0 {
+			return event
+		}
+
+		// Handle Down arrow or Tab - move forward with wrapping
+		if event.Key() == tcell.KeyDown || event.Key() == tcell.KeyTab {
+			nextIdx := (currentIdx + 1) % totalItems
+			form.SetFocus(nextIdx)
+			return nil
+		}
+
+		// Handle Up arrow or Backtab - move backward with wrapping
+		if event.Key() == tcell.KeyUp || event.Key() == tcell.KeyBacktab {
+			nextIdx := (currentIdx - 1 + totalItems) % totalItems
+			form.SetFocus(nextIdx)
+			return nil
+		}
+
+		// Handle Space on Continue button
+		if event.Key() == tcell.KeyRune && event.Rune() == ' ' {
+			if btnIdx >= 0 {
+				s.dismiss()
+				return nil
+			}
+		}
+
+		return event
+	})
 
 	// Center everything in a flex
 	// We use a centered flex to make it look like a modal
