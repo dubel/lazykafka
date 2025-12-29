@@ -56,6 +56,7 @@ func NewSplashPanel(app *App, settings *config.Settings) *SplashPanel {
 		})
 
 	form.SetButtonsAlign(tview.AlignCenter)
+	form.SetFocus(2)
 
 	// Center everything in a flex
 	// We use a centered flex to make it look like a modal
