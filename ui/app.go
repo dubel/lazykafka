@@ -15,6 +15,7 @@ type App struct {
 	TviewApp *tview.Application
 	Grid     *tview.Grid
 	Config   *config.Config
+	Settings *config.Settings
 
 	BrokersPanel *BrokersPanel
 	TopicsPanel  *TopicsPanel
@@ -32,9 +33,16 @@ func NewApp() *App {
 		cfg = &config.Config{Brokers: []config.Broker{}}
 	}
 
+	settings, err := config.LoadSettings()
+	if err != nil {
+		// Fallback defaults if load fails (though LoadSettings handles file not found)
+		settings = &config.Settings{ShowSplashOnStartup: true}
+	}
+
 	app := &App{
 		TviewApp: tview.NewApplication(),
 		Config:   cfg,
+		Settings: settings,
 	}
 
 	app.BrokersPanel = NewBrokersPanel(app)
@@ -51,7 +59,14 @@ func NewApp() *App {
 		AddItem(app.ConsumePanel.View, 1, 0, 1, 1, 0, 0, false).
 		AddItem(app.ProducePanel.View, 1, 1, 1, 1, 0, 0, false)
 
-	app.TviewApp.SetRoot(app.Grid, true).EnableMouse(true)
+	if app.Settings.ShowSplashOnStartup {
+		splash := NewSplashPanel(app, app.Settings)
+		app.TviewApp.SetRoot(splash.Flex, true).EnableMouse(true)
+		app.InModal = true
+	} else {
+		app.TviewApp.SetRoot(app.Grid, true).EnableMouse(true)
+	}
+
 	app.setupNavigation()
 
 	return app
