@@ -58,6 +58,10 @@ func NewBrokersPanel(app *App) *BrokersPanel {
 			p.removeCurrentBroker()
 			return nil
 		}
+		if event.Rune() == 'e' {
+			p.showEditBrokerModal()
+			return nil
+		}
 		return event
 	})
 
@@ -156,6 +160,53 @@ func (p *BrokersPanel) showAddBrokerModal() {
 	})
 
 	form.SetBorder(true).SetTitle("Add Broker").SetTitleAlign(tview.AlignCenter)
+	p.App.InModal = true
+	p.App.TviewApp.SetRoot(form, true)
+}
+
+func (p *BrokersPanel) showEditBrokerModal() {
+	idx := p.ListView.GetCurrentItem()
+	// Don't allow editing the "Add New" item
+	if idx >= len(p.App.Config.Brokers) {
+		return
+	}
+
+	broker := p.App.Config.Brokers[idx]
+
+	form := tview.NewForm().
+		AddInputField("Broker Address", broker.Address, 20, nil, nil).
+		AddInputField("Alias (optional)", broker.Alias, 20, nil, nil)
+
+	form.AddButton("Save", func() {
+		addr := form.GetFormItem(0).(*tview.InputField).GetText()
+		alias := form.GetFormItem(1).(*tview.InputField).GetText()
+
+		if addr != "" {
+			p.App.Config.Brokers[idx].Address = addr
+			p.App.Config.Brokers[idx].Alias = alias
+			config.SaveConfig(p.App.Config)
+			p.refreshList()
+		}
+		p.App.InModal = false
+		p.App.TviewApp.SetRoot(p.App.Grid, true)
+	}).
+		AddButton("Cancel", func() {
+			p.App.InModal = false
+			p.App.TviewApp.SetRoot(p.App.Grid, true)
+		})
+
+	// Enable Tab and arrow key navigation
+	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyDown, tcell.KeyTab:
+			return tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+		case tcell.KeyUp, tcell.KeyBacktab:
+			return tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone)
+		}
+		return event
+	})
+
+	form.SetBorder(true).SetTitle("Edit Broker").SetTitleAlign(tview.AlignCenter)
 	p.App.InModal = true
 	p.App.TviewApp.SetRoot(form, true)
 }
