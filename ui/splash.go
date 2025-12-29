@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/dubel/lazykafka/config"
+	"github.com/mattn/go-runewidth"
 	"github.com/rivo/tview"
 )
 
@@ -28,8 +29,9 @@ func NewSplashPanel(app *App, settings *config.Settings) *SplashPanel {
 	height := len(lines)
 	width := 0
 	for _, line := range lines {
-		if len(line) > width {
-			width = len(line)
+		w := runewidth.StringWidth(line)
+		if w > width {
+			width = w
 		}
 	}
 
