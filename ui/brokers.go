@@ -16,7 +16,7 @@ func NewBrokersPanel(app *App) *BrokersPanel {
 	listView := tview.NewList()
 
 	footer := tview.NewTextView().
-		SetText("(a)dd | (r)emove | (enter) to connect").
+		SetText("(a)dd | (e)dit | (r)emove | (enter) to connect").
 		SetTextAlign(tview.AlignCenter).
 		SetDynamicColors(true)
 
