@@ -79,3 +79,19 @@ brews:
     # Test block for the formula
     test: |
       system "#{bin}/lazykafka", "--version"
+
+# Generate Linux packages (deb, rpm)
+nfpms:
+  -
+    maintainer: "lazykafka <https://github.com/dubel/lazykafka>"
+    description: "Relaxed Kafka TUI for browsing and managing clusters."
+    homepage: "https://github.com/dubel/lazykafka-dist"
+    license: "MIT"
+    formats:
+      - deb
+      - rpm
+    
+    # Packages to be installed/updated
+    dependencies:
+      - git
+
