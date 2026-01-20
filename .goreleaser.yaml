@@ -1,0 +1,81 @@
+# .goreleaser.yaml
+version: 2
+
+project_name: lazykafka
+
+before:
+  hooks:
+    # You may need to run 'go mod tidy' or ensure deps are present
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    # Ensure the binary name matches the project name
+    binary: lazykafka
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+archives:
+  - format: tar.gz
+    # The name template for the release archive
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    # Use 'replacement' to make the OS/Arch names nicer in filenames
+    builds_info:
+      group: root
+      owner: root
+
+checksum:
+  name_template: 'checksums.txt'
+
+logs:
+  ignore:
+    - .idea
+    - .vscode
+
+# Publish the Release (Binaries) to a DIFFERENT, PUBLIC repository
+# This keeps your source code (current repo) private.
+release:
+  github:
+    owner: dubel
+    name: lazykafka-dist # MUST be created by you manually
+  draft: true # Safe default to check before publishing
+  prerelease: auto
+
+# Publish the Homebrew Formula to a DIFFERENT, PUBLIC repository
+brews:
+  - 
+    # The repository to push the formula to
+    repository:
+      owner: dubel
+      name: homebrew-tap # MUST be created by you manually
+      # token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}" 
+      # We will use the main GITHUB_TOKEN if it has scopes, 
+      # but usually GoReleaser needs a PAT for cross-repo writes.
+
+    # The project name and description for the formula
+    name: lazykafka
+    homepage: "https://github.com/dubel/lazykafka-dist" # Point to the dist repo since source is private
+    description: "Relaxed Kafka TUI for browsing and managing clusters."
+    
+    # Packages needed by the formula at runtime/install time
+    # dependencies:
+    #   - name: git
+
+    # Setup the install instruction
+    install: |
+      bin.install "lazykafka"
+    
+    # Test block for the formula
+    test: |
+      system "#{bin}/lazykafka", "--version"

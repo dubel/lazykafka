@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # Needed for creating the release in THIS repo (if we were doing that), but vital for GoReleaser generally.
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          # 'latest', 'nightly', or a specific version
+          distribution: goreleaser
+          version: ~> v2
+          args: release --clean
+        env:
+          # Needs a Personal Access Token (PAT) with `repo` scope to write to 
+          # the external 'lazykafka-dist' and 'homebrew-tap' repositories.
+          # Add this as a secret in your PRIVATE repository settings.
+          GITHUB_TOKEN: ${{ secrets.GH_PAT_FOR_ACTIONS }}
