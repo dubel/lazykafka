@@ -90,6 +90,7 @@ nfpms:
     formats:
       - deb
       - rpm
+      - archlinux
     
     # Packages to be installed/updated
     dependencies:
