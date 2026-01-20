@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"log"
 
@@ -14,7 +15,7 @@ type ConsumePanel struct {
 	TextView      *tview.TextView
 	CurrentTopic  string
 	FromBeginning bool
-	StopChan      chan struct{}
+	cancelFunc    context.CancelFunc // Replaces StopChan for cleaner cancellation
 }
 
 func NewConsumePanel(app *App) *ConsumePanel {
@@ -84,10 +85,11 @@ func NewConsumePanel(app *App) *ConsumePanel {
 func (p *ConsumePanel) StartConsuming(topic string) {
 	log.Printf("StartConsuming: Starting consumption for topic: %s, FromBeginning: %v", topic, p.FromBeginning)
 
-	if p.StopChan != nil {
-		log.Println("StartConsuming: Stopping previous consumption")
-		close(p.StopChan)
-		p.StopChan = nil
+	// Cancel any previous consumption
+	if p.cancelFunc != nil {
+		log.Println("StartConsuming: Cancelling previous consumption")
+		p.cancelFunc()
+		p.cancelFunc = nil
 	}
 
 	p.CurrentTopic = topic
@@ -101,11 +103,14 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 		return
 	}
 
-	p.StopChan = make(chan struct{})
+	// Create a cancellable context
+	ctx, cancel := context.WithCancel(context.Background())
+	p.cancelFunc = cancel
+
 	messages := make(chan string)
 	errors := make(chan error)
 
-	go p.App.KafkaManager.ConsumeTopic(topic, p.FromBeginning, messages, errors, p.StopChan)
+	go p.App.KafkaManager.ConsumeTopic(ctx, topic, p.FromBeginning, messages, errors)
 	p.App.ManagerMutex.RUnlock()
 
 	log.Printf("StartConsuming: Started consuming messages from topic: %s", topic)
@@ -127,10 +132,19 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 				p.App.TviewApp.QueueUpdateDraw(func() {
 					fmt.Fprintf(p.TextView, "[red]Error: %v[white]\n", err)
 				})
-			case <-p.StopChan:
+			case <-ctx.Done():
 				log.Printf("StartConsuming: Stopped consuming from topic: %s (received %d messages)", topic, messageCount)
 				return
 			}
 		}
 	}()
+}
+
+// StopConsuming cancels any active message consumption
+func (p *ConsumePanel) StopConsuming() {
+	if p.cancelFunc != nil {
+		log.Println("StopConsuming: Cancelling active consumption")
+		p.cancelFunc()
+		p.cancelFunc = nil
+	}
 }

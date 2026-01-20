@@ -1,8 +1,10 @@
 package kafka
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -49,7 +51,10 @@ func (m *Manager) ProduceMessage(topic, value string) error {
 	return err
 }
 
-func (m *Manager) ConsumeTopic(topic string, fromBeginning bool, messages chan<- string, errors chan<- error, stop <-chan struct{}) {
+// ConsumeTopic consumes messages from all partitions of a topic.
+// It uses context for cancellation and WaitGroup for clean goroutine shutdown.
+// The function blocks until the context is cancelled and all partition consumers have stopped.
+func (m *Manager) ConsumeTopic(ctx context.Context, topic string, fromBeginning bool, messages chan<- string, errors chan<- error) {
 	consumer, err := sarama.NewConsumerFromClient(m.Client.saramaClient)
 	if err != nil {
 		errors <- err
@@ -63,8 +68,8 @@ func (m *Manager) ConsumeTopic(topic string, fromBeginning bool, messages chan<-
 		return
 	}
 
-	// For simplicity, we'll just consume from all partitions
-	// In a real app, we might want to handle this more gracefully
+	var wg sync.WaitGroup
+
 	for _, partition := range partitions {
 		offset := sarama.OffsetNewest
 		if fromBeginning {
@@ -77,22 +82,33 @@ func (m *Manager) ConsumeTopic(topic string, fromBeginning bool, messages chan<-
 			continue
 		}
 
-		go func(pc sarama.PartitionConsumer) {
+		wg.Add(1)
+		go func(pc sarama.PartitionConsumer, partitionID int32) {
+			defer wg.Done()
 			defer pc.Close()
 			for {
 				select {
 				case msg := <-pc.Messages():
-					messages <- fmt.Sprintf("[%d] %s", msg.Partition, string(msg.Value))
+					if msg != nil {
+						messages <- fmt.Sprintf("[P%d] %s", msg.Partition, string(msg.Value))
+					}
 				case err := <-pc.Errors():
-					errors <- err
-				case <-stop:
+					if err != nil {
+						errors <- err
+					}
+				case <-ctx.Done():
+					log.Printf("ConsumeTopic: Partition %d consumer stopping (context cancelled)", partitionID)
 					return
 				}
 			}
-		}(pc)
+		}(pc, partition)
 	}
 
-	<-stop
+	// Wait for context cancellation
+	<-ctx.Done()
+	// Wait for all partition consumers to finish cleanly
+	wg.Wait()
+	log.Printf("ConsumeTopic: All partition consumers stopped for topic %s", topic)
 }
 
 func (m *Manager) getAdminConfig() *sarama.Config {

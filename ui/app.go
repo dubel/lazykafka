@@ -131,11 +131,8 @@ func (a *App) ConnectToBroker(broker string) error {
 	log.Printf("ConnectToBroker: Starting connection to broker: %s", broker)
 
 	// Stop any active consumption
-	if a.ConsumePanel.StopChan != nil {
-		log.Println("ConnectToBroker: Stopping active consumption")
-		close(a.ConsumePanel.StopChan)
-		a.ConsumePanel.StopChan = nil
-	}
+	a.ConsumePanel.StopConsuming()
+	log.Println("ConnectToBroker: Stopped any active consumption")
 
 	// Clear the consume panel
 	a.TviewApp.QueueUpdateDraw(func() {
