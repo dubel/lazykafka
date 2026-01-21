@@ -46,7 +46,7 @@ release:
   github:
     owner: dubel
     name: lazykafka-dist # MUST be created by you manually
-  draft: true # Safe default to check before publishing
+  draft: false # Publish immediately to ensure tag-based URLs work
   prerelease: auto
 
 # Publish the Homebrew Formula to a DIFFERENT, PUBLIC repository
