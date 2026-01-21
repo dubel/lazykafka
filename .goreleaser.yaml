@@ -38,10 +38,7 @@ archives:
 checksum:
   name_template: 'checksums.txt'
 
-logs:
-  ignore:
-    - .idea
-    - .vscode
+
 
 # Publish the Release (Binaries) to a DIFFERENT, PUBLIC repository
 # This keeps your source code (current repo) private.
