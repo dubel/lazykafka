@@ -8,6 +8,9 @@
  - read from topics (with an option to start from beginning)
  - publish to topics
 
+**disclaimer**
+Lazykafka is designed for quick observability, not heavy lifting. We intentionally skip consumer groups and offset tracking, so you can peek into your streams without joining a group or "stealing" messages from your actual consumers. It's a transparent window into your cluster that leaves no footprints
+
 # Installation
 **Homebrew (macOS/Linux**)
 
