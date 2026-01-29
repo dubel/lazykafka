@@ -129,6 +129,12 @@ func (a *App) setupNavigation() {
 			return nil
 		}
 
+		// Exit application on Escape
+		if event.Key() == tcell.KeyEscape {
+			a.TviewApp.Stop()
+			return nil
+		}
+
 		return event
 	})
 }
