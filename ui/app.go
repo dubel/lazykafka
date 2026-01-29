@@ -50,14 +50,20 @@ func NewApp() *App {
 	app.ConsumePanel = NewConsumePanel(app)
 	app.ProducePanel = NewProducePanel(app)
 
+	// Create footer with centered help text
+	footer := tview.NewTextView().
+		SetTextAlign(tview.AlignCenter).
+		SetText("(esc) to exit | (F5) logs | (F6) splash")
+
 	app.Grid = tview.NewGrid().
-		SetRows(0, 0).
+		SetRows(0, 0, 1).
 		SetColumns(0, 0).
 		SetBorders(true).
 		AddItem(app.BrokersPanel.View, 0, 0, 1, 1, 0, 0, true).
 		AddItem(app.TopicsPanel.View, 0, 1, 1, 1, 0, 0, false).
 		AddItem(app.ConsumePanel.View, 1, 0, 1, 1, 0, 0, false).
-		AddItem(app.ProducePanel.View, 1, 1, 1, 1, 0, 0, false)
+		AddItem(app.ProducePanel.View, 1, 1, 1, 1, 0, 0, false).
+		AddItem(footer, 2, 0, 1, 2, 0, 0, false)
 
 	if app.Settings.ShowSplashOnStartup {
 		splash := NewSplashPanel(app, app.Settings)
@@ -118,8 +124,20 @@ func (a *App) setupNavigation() {
 		}
 
 		// Log viewer
-		if event.Rune() == 'l' {
+		if event.Key() == tcell.KeyF5 {
 			a.showLogViewer()
+			return nil
+		}
+
+		// Splash screen
+		if event.Key() == tcell.KeyF6 {
+			a.showSplashScreen()
+			return nil
+		}
+
+		// Exit application on Escape
+		if event.Key() == tcell.KeyEscape {
+			a.TviewApp.Stop()
 			return nil
 		}
 
@@ -194,12 +212,12 @@ func (a *App) showLogViewer() {
 	textView.ScrollToEnd()
 
 	textView.SetBorder(true).
-		SetTitle("Application Log (press 'l' or Esc to close)").
+		SetTitle("Application Log (press F5 or Esc to close)").
 		SetTitleAlign(tview.AlignCenter)
 
 	// Handle key presses
 	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape || event.Rune() == 'l' {
+		if event.Key() == tcell.KeyEscape || event.Key() == tcell.KeyF5 {
 			a.InModal = false
 			a.TviewApp.SetRoot(a.Grid, true)
 			return nil
@@ -209,4 +227,10 @@ func (a *App) showLogViewer() {
 
 	a.InModal = true
 	a.TviewApp.SetRoot(textView, true)
+}
+
+func (a *App) showSplashScreen() {
+	splash := NewSplashPanel(a, a.Settings)
+	a.InModal = true
+	a.TviewApp.SetRoot(splash.Flex, true)
 }

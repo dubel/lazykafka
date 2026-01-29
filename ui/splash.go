@@ -97,6 +97,12 @@ func NewSplashPanel(app *App, settings *config.Settings) *SplashPanel {
 			}
 		}
 
+		// Handle Escape to dismiss
+		if event.Key() == tcell.KeyEscape {
+			s.dismiss()
+			return nil
+		}
+
 		return event
 	})
 
