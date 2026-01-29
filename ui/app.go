@@ -50,14 +50,20 @@ func NewApp() *App {
 	app.ConsumePanel = NewConsumePanel(app)
 	app.ProducePanel = NewProducePanel(app)
 
+	// Create footer with centered help text
+	footer := tview.NewTextView().
+		SetTextAlign(tview.AlignCenter).
+		SetText("(esc) to exit | (l)ogs toggle")
+
 	app.Grid = tview.NewGrid().
-		SetRows(0, 0).
+		SetRows(0, 0, 1).
 		SetColumns(0, 0).
 		SetBorders(true).
 		AddItem(app.BrokersPanel.View, 0, 0, 1, 1, 0, 0, true).
 		AddItem(app.TopicsPanel.View, 0, 1, 1, 1, 0, 0, false).
 		AddItem(app.ConsumePanel.View, 1, 0, 1, 1, 0, 0, false).
-		AddItem(app.ProducePanel.View, 1, 1, 1, 1, 0, 0, false)
+		AddItem(app.ProducePanel.View, 1, 1, 1, 1, 0, 0, false).
+		AddItem(footer, 2, 0, 1, 2, 0, 0, false)
 
 	if app.Settings.ShowSplashOnStartup {
 		splash := NewSplashPanel(app, app.Settings)
