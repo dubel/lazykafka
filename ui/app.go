@@ -53,7 +53,7 @@ func NewApp() *App {
 	// Create footer with centered help text
 	footer := tview.NewTextView().
 		SetTextAlign(tview.AlignCenter).
-		SetText("(esc) to exit | (l)ogs toggle")
+		SetText("(esc) to exit | (l)ogs toggle | (F5) splash")
 
 	app.Grid = tview.NewGrid().
 		SetRows(0, 0, 1).
@@ -126,6 +126,12 @@ func (a *App) setupNavigation() {
 		// Log viewer
 		if event.Rune() == 'l' {
 			a.showLogViewer()
+			return nil
+		}
+
+		// Splash screen
+		if event.Key() == tcell.KeyF5 {
+			a.showSplashScreen()
 			return nil
 		}
 
@@ -221,4 +227,10 @@ func (a *App) showLogViewer() {
 
 	a.InModal = true
 	a.TviewApp.SetRoot(textView, true)
+}
+
+func (a *App) showSplashScreen() {
+	splash := NewSplashPanel(a, a.Settings)
+	a.InModal = true
+	a.TviewApp.SetRoot(splash.Flex, true)
 }
