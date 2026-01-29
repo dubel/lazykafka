@@ -212,12 +212,12 @@ func (a *App) showLogViewer() {
 	textView.ScrollToEnd()
 
 	textView.SetBorder(true).
-		SetTitle("Application Log (press 'l' or Esc to close)").
+		SetTitle("Application Log (press F5 or Esc to close)").
 		SetTitleAlign(tview.AlignCenter)
 
 	// Handle key presses
 	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape || event.Rune() == 'l' {
+		if event.Key() == tcell.KeyEscape || event.Key() == tcell.KeyF5 {
 			a.InModal = false
 			a.TviewApp.SetRoot(a.Grid, true)
 			return nil
