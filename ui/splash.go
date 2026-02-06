@@ -53,7 +53,7 @@ func NewSplashPanel(app *App, settings *config.Settings) *SplashPanel {
 		})
 
 	form.SetButtonsAlign(tview.AlignCenter)
-	form.SetFocus(2)
+	form.SetFocus(1)
 
 	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		itemIdx, btnIdx := form.GetFocusedItemIndex()
