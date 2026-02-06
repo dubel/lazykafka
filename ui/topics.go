@@ -10,11 +10,13 @@ import (
 )
 
 type TopicsPanel struct {
-	App        *App
-	View       tview.Primitive
-	ListView   *tview.List
-	Footer     *tview.TextView
-	ResetTimer *time.Timer
+	App           *App
+	View          tview.Primitive
+	ListView      *tview.List
+	Footer        *tview.TextView
+	ResetTimer    *time.Timer
+	Topics        []string
+	SelectedIndex int
 }
 
 func NewTopicsPanel(app *App) *TopicsPanel {
@@ -50,15 +52,18 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 	})
 
 	p := &TopicsPanel{
-		App:      app,
-		View:     flex,
-		ListView: listView,
-		Footer:   footer,
+		App:           app,
+		View:          flex,
+		ListView:      listView,
+		Footer:        footer,
+		SelectedIndex: -1,
 	}
 
 	p.ListView.SetSelectedFunc(func(i int, s1, s2 string, r rune) {
-		app.ConsumePanel.StartConsuming(s1)
-		app.ProducePanel.SetTopic(s1)
+		topicName := p.getTopicName(i)
+		p.selectTopic(i)
+		app.ConsumePanel.StartConsuming(topicName)
+		app.ProducePanel.SetTopic(topicName)
 		app.TviewApp.SetFocus(app.ConsumePanel.View)
 	})
 
@@ -107,6 +112,26 @@ func (p *TopicsPanel) showTemporaryMessage(msg string, duration time.Duration) {
 	})
 }
 
+func (p *TopicsPanel) getTopicName(index int) string {
+	if index >= 0 && index < len(p.Topics) {
+		return p.Topics[index]
+	}
+	return ""
+}
+
+func (p *TopicsPanel) selectTopic(index int) {
+	// Remove marker from previously selected topic
+	if p.SelectedIndex >= 0 && p.SelectedIndex < len(p.Topics) {
+		p.ListView.SetItemText(p.SelectedIndex, p.Topics[p.SelectedIndex], "")
+	}
+	// Set new selection
+	p.SelectedIndex = index
+	// Add marker to newly selected topic
+	if index >= 0 && index < len(p.Topics) {
+		p.ListView.SetItemText(index, p.Topics[index]+" >> selected <<", "")
+	}
+}
+
 func (p *TopicsPanel) LoadTopics() {
 	log.Println("LoadTopics: Starting refresh")
 
@@ -141,9 +166,22 @@ func (p *TopicsPanel) LoadTopics() {
 	p.App.TviewApp.QueueUpdateDraw(func() {
 		log.Println("LoadTopics: Updating UI list")
 		p.ListView.Clear()
-		for _, t := range topics {
-			p.ListView.AddItem(t, "", 0, nil)
+		p.Topics = topics
+		// Find if previously selected topic still exists
+		var newSelectedIndex = -1
+		var selectedTopicName string
+		if p.SelectedIndex >= 0 && p.SelectedIndex < len(p.Topics) {
+			selectedTopicName = p.Topics[p.SelectedIndex]
 		}
+		for i, t := range topics {
+			displayName := t
+			if t == selectedTopicName {
+				newSelectedIndex = i
+				displayName = t + " >> selected <<"
+			}
+			p.ListView.AddItem(displayName, "", 0, nil)
+		}
+		p.SelectedIndex = newSelectedIndex
 		log.Println("LoadTopics: UI update complete")
 	})
 	log.Println("LoadTopics: Queued UI update")
