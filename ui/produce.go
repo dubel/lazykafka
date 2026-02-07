@@ -115,7 +115,7 @@ func (p *ProducePanel) showTemporaryMessage(msg string, duration time.Duration) 
 
 	p.ResetTimer = time.AfterFunc(duration, func() {
 		p.App.TviewApp.QueueUpdateDraw(func() {
-			p.Footer.SetText("(enter) to send a message")
+			p.Footer.SetText("(alt+enter) or (ctrl+s) to send")
 		})
 	})
 }
