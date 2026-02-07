@@ -19,7 +19,7 @@ type ProducePanel struct {
 
 func NewProducePanel(app *App) *ProducePanel {
 	textArea := tview.NewTextArea()
-	textArea.SetPlaceholder("Type your message here...")
+	textArea.SetPlaceholder("Type (or paste) your message here...")
 	textArea.SetWrap(true)
 	textArea.SetWordWrap(true)
 
