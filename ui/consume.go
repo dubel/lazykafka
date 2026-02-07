@@ -69,7 +69,11 @@ func NewConsumePanel(app *App) *ConsumePanel {
 			if p.FromBeginning {
 				status = "From Beginning"
 			}
-			flex.SetTitle(fmt.Sprintf("Consume (F3) (%s)", status))
+			if p.CurrentTopic != "" {
+				flex.SetTitle(fmt.Sprintf("Consume (F3) - %s (%s)", p.CurrentTopic, status))
+			} else {
+				flex.SetTitle(fmt.Sprintf("Consume (F3) (%s)", status))
+			}
 			// Restart consumption if topic is selected
 			if p.CurrentTopic != "" {
 				p.StartConsuming(p.CurrentTopic)
@@ -94,7 +98,13 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 
 	p.CurrentTopic = topic
 	p.TextView.Clear()
-	p.TextView.SetTitle(fmt.Sprintf("Consume (F3) - %s", topic))
+	status := "New Messages"
+	if p.FromBeginning {
+		status = "From Beginning"
+	}
+	if flex, ok := p.View.(*tview.Flex); ok {
+		flex.SetTitle(fmt.Sprintf("Consume (F3) - %s (%s)", topic, status))
+	}
 
 	p.App.ManagerMutex.RLock()
 	if p.App.KafkaManager == nil {
