@@ -24,7 +24,7 @@ func NewProducePanel(app *App) *ProducePanel {
 	textArea.SetWordWrap(true)
 
 	footer := tview.NewTextView().
-		SetText("(ctrl+enter) to send a message").
+		SetText("(alt+enter) or (ctrl+s) to send").
 		SetTextAlign(tview.AlignCenter).
 		SetDynamicColors(true)
 
@@ -60,8 +60,10 @@ func NewProducePanel(app *App) *ProducePanel {
 	}
 
 	p.TextArea.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		// Ctrl+Enter to send message
-		if event.Key() == tcell.KeyEnter && event.Modifiers()&tcell.ModCtrl != 0 {
+		// Alt+Enter or Ctrl+S to send message
+		isAltEnter := event.Key() == tcell.KeyEnter && event.Modifiers()&tcell.ModAlt != 0
+		isCtrlS := event.Key() == tcell.KeyCtrlS
+		if isAltEnter || isCtrlS {
 			text := p.TextArea.GetText()
 
 			p.App.ManagerMutex.RLock()
