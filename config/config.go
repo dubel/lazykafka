@@ -107,3 +107,18 @@ func SaveSettings(settings *Settings) error {
 
 	return json.NewEncoder(file).Encode(settings)
 }
+
+// GetLogFilePath returns the path to the log file in the user's home directory
+func GetLogFilePath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	dir := filepath.Join(home, ".lazykafka")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", err
+	}
+
+	return filepath.Join(dir, "lazykafka.log"), nil
+}

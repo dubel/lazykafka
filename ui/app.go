@@ -195,7 +195,10 @@ func (a *App) ConnectToBroker(broker string) error {
 }
 
 func (a *App) showLogViewer() {
-	logFile := "lazykafka.log"
+	logFile, err := config.GetLogFilePath()
+	if err != nil {
+		logFile = "lazykafka.log" // fallback
+	}
 
 	// Read log file
 	content, err := os.ReadFile(logFile)
