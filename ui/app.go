@@ -99,7 +99,7 @@ func (a *App) setupNavigation() {
 				a.TviewApp.SetFocus(a.ConsumePanel.View)
 			} else if focus == a.ConsumePanel.View || focus == a.ConsumePanel.TextView {
 				a.TviewApp.SetFocus(a.ProducePanel.View)
-			} else if focus == a.ProducePanel.View || focus == a.ProducePanel.InputField {
+			} else if focus == a.ProducePanel.View || focus == a.ProducePanel.TextArea {
 				a.TviewApp.SetFocus(a.BrokersPanel.View)
 			} else {
 				a.TviewApp.SetFocus(a.BrokersPanel.View)
@@ -161,7 +161,7 @@ func (a *App) ConnectToBroker(broker string) error {
 
 	// Clear the produce panel
 	a.TviewApp.QueueUpdateDraw(func() {
-		a.ProducePanel.InputField.SetText("")
+		a.ProducePanel.TextArea.SetText("", true)
 		a.ProducePanel.CurrentTopic = ""
 		if flex, ok := a.ProducePanel.View.(*tview.Flex); ok {
 			flex.SetTitle("Produce (F4)")
@@ -195,7 +195,10 @@ func (a *App) ConnectToBroker(broker string) error {
 }
 
 func (a *App) showLogViewer() {
-	logFile := "lazykafka.log"
+	logFile, err := config.GetLogFilePath()
+	if err != nil {
+		logFile = "lazykafka.log" // fallback
+	}
 
 	// Read log file
 	content, err := os.ReadFile(logFile)

@@ -11,24 +11,26 @@ import (
 type ProducePanel struct {
 	App          *App
 	View         tview.Primitive
-	InputField   *tview.InputField
+	TextArea     *tview.TextArea
 	Footer       *tview.TextView
 	CurrentTopic string
 	ResetTimer   *time.Timer
 }
 
 func NewProducePanel(app *App) *ProducePanel {
-	inputField := tview.NewInputField()
-	inputField.SetLabel("Message: ")
+	textArea := tview.NewTextArea()
+	textArea.SetPlaceholder("Type (or paste) your message here...")
+	textArea.SetWrap(true)
+	textArea.SetWordWrap(true)
 
 	footer := tview.NewTextView().
-		SetText("(enter) to send a message").
+		SetText("(alt+enter) or (ctrl+s) to send").
 		SetTextAlign(tview.AlignCenter).
 		SetDynamicColors(true)
 
 	flex := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(inputField, 0, 1, true).
+		AddItem(textArea, 0, 1, true).
 		AddItem(footer, 1, 0, false)
 
 	flex.SetBorder(true).
@@ -42,24 +44,27 @@ func NewProducePanel(app *App) *ProducePanel {
 		flex.SetBorderColor(tcell.ColorWhite)
 	})
 
-	// Set focus handlers on the InputField to update the Flex border
-	inputField.SetFocusFunc(func() {
+	// Set focus handlers on the TextArea to update the Flex border
+	textArea.SetFocusFunc(func() {
 		flex.SetBorderColor(tcell.ColorGreen)
 	})
-	inputField.SetBlurFunc(func() {
+	textArea.SetBlurFunc(func() {
 		flex.SetBorderColor(tcell.ColorWhite)
 	})
 
 	p := &ProducePanel{
-		App:        app,
-		View:       flex,
-		InputField: inputField,
-		Footer:     footer,
+		App:      app,
+		View:     flex,
+		TextArea: textArea,
+		Footer:   footer,
 	}
 
-	p.InputField.SetDoneFunc(func(key tcell.Key) {
-		if key == tcell.KeyEnter {
-			text := p.InputField.GetText()
+	p.TextArea.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Alt+Enter or Ctrl+S to send message
+		isAltEnter := event.Key() == tcell.KeyEnter && event.Modifiers()&tcell.ModAlt != 0
+		isCtrlS := event.Key() == tcell.KeyCtrlS
+		if isAltEnter || isCtrlS {
+			text := p.TextArea.GetText()
 
 			p.App.ManagerMutex.RLock()
 			if p.CurrentTopic == "" || p.App.KafkaManager == nil {
@@ -72,13 +77,13 @@ func NewProducePanel(app *App) *ProducePanel {
 				} else if p.App.KafkaManager == nil {
 					log.Println("ProduceMessage: ERROR - KafkaManager is nil")
 				}
-				return
+				return nil
 			}
 
 			if text == "" {
 				p.App.ManagerMutex.RUnlock()
 				log.Println("ProduceMessage: Empty message, ignoring")
-				return
+				return nil
 			}
 
 			log.Printf("ProduceMessage: Sending message to topic '%s': %s", p.CurrentTopic, text)
@@ -90,10 +95,12 @@ func NewProducePanel(app *App) *ProducePanel {
 				p.showTemporaryMessage("[red]Failed to send message!", 5*time.Second)
 			} else {
 				log.Printf("ProduceMessage: Successfully sent message to topic '%s'", p.CurrentTopic)
-				p.InputField.SetText("")
+				p.TextArea.SetText("", true)
 				p.showTemporaryMessage("[green]Message sent!", 2*time.Second)
 			}
+			return nil
 		}
+		return event
 	})
 
 	return p
@@ -108,7 +115,7 @@ func (p *ProducePanel) showTemporaryMessage(msg string, duration time.Duration) 
 
 	p.ResetTimer = time.AfterFunc(duration, func() {
 		p.App.TviewApp.QueueUpdateDraw(func() {
-			p.Footer.SetText("(enter) to send a message")
+			p.Footer.SetText("(alt+enter) or (ctrl+s) to send")
 		})
 	})
 }

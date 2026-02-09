@@ -48,16 +48,12 @@ func NewSplashPanel(app *App, settings *config.Settings) *SplashPanel {
 			settings.ShowSplashOnStartup = checked
 			config.SaveSettings(settings)
 		}).
-		AddCheckbox("Check for updates", settings.CheckForUpdates, func(checked bool) {
-			settings.CheckForUpdates = checked
-			config.SaveSettings(settings)
-		}).
 		AddButton("Continue", func() {
 			s.dismiss()
 		})
 
 	form.SetButtonsAlign(tview.AlignCenter)
-	form.SetFocus(2)
+	form.SetFocus(1)
 
 	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		itemIdx, btnIdx := form.GetFocusedItemIndex()
