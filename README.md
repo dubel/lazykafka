@@ -39,7 +39,7 @@ Lazykafka is designed for quick observability, not heavy lifting. We intentional
     brew install lazykafka
 
 **Linux (Debian/Ubuntu)**
-Go to the releases page of this repo (https://github.com/dubel/lazykafka-dist/releases), download the .deb file, and run:
+Go to the releases page of this repo (https://github.com/dubel/lazykafka/releases), download the .deb file, and run:
 
     sudo dpkg -i lazykafka_*.deb
 
