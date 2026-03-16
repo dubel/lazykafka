@@ -1,4 +1,4 @@
-.PHONY: build run test test-integration kafka-up kafka-down clean
+.PHONY: build run test test-integration kafka-up kafka-down clean publish
 
 # Build the application
 build:
@@ -37,3 +37,10 @@ clean:
 
 # Full test suite
 test-all: test test-integration
+
+# Tag and push the current version to trigger the release pipeline
+publish:
+	@VERSION=$$(cat current-version | tr -d '[:space:]'); \
+	echo "Publishing version: $$VERSION"; \
+	git tag $$VERSION && git push origin $$VERSION
+

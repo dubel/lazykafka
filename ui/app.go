@@ -25,9 +25,10 @@ type App struct {
 	KafkaManager *kafka.Manager
 	ManagerMutex sync.RWMutex
 	InModal      bool
+	Version      string
 }
 
-func NewApp() *App {
+func NewApp(version string) *App {
 	cfg, err := config.LoadConfig()
 	if err != nil || cfg == nil {
 		cfg = &config.Config{Brokers: []config.Broker{}}
@@ -43,6 +44,7 @@ func NewApp() *App {
 		TviewApp: tview.NewApplication(),
 		Config:   cfg,
 		Settings: settings,
+		Version:  version,
 	}
 
 	app.BrokersPanel = NewBrokersPanel(app)

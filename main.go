@@ -1,11 +1,32 @@
 package main
 
 import (
+	_ "embed"
 	"log"
+	"strings"
 
 	"github.com/dubel/lazykafka/config"
 	"github.com/dubel/lazykafka/ui"
 )
+
+// version is injected at release build time via ldflags:
+//
+//	-X main.version={{.Version}}
+//
+// For local builds it falls back to the embedded current-version file.
+var version string
+
+//go:embed current-version
+var embeddedVersion string
+
+// getVersion returns the version string, preferring the ldflags-injected value
+// and falling back to the embedded current-version file for local dev builds.
+func getVersion() string {
+	if v := strings.TrimSpace(version); v != "" {
+		return v
+	}
+	return strings.TrimSpace(embeddedVersion)
+}
 
 func main() {
 	// Setup daily log file with rotation
@@ -16,7 +37,7 @@ func main() {
 		log.Println("LazyKafka started")
 	}
 
-	app := ui.NewApp()
+	app := ui.NewApp(getVersion())
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}

@@ -102,12 +102,19 @@ func NewSplashPanel(app *App, settings *config.Settings) *SplashPanel {
 		return event
 	})
 
+	// Version label
+	versionView := tview.NewTextView().
+		SetText(app.Version).
+		SetTextAlign(tview.AlignCenter).
+		SetDynamicColors(true)
+
 	// Center everything in a flex
 	// We use a centered flex to make it look like a modal
 	modalContent := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(artView, height+2, 0, false). // +2 for detailed spacing
-		AddItem(form, 7, 0, true)             // Checkboxes + Button
+		AddItem(form, 7, 0, true).            // Checkboxes + Button
+		AddItem(versionView, 1, 0, false)     // Version line
 
 	modalContent.SetBorder(true).
 		SetTitle(" Welcome to LazyKafka ").
@@ -118,7 +125,7 @@ func NewSplashPanel(app *App, settings *config.Settings) *SplashPanel {
 		AddItem(nil, 0, 1, false).
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 			AddItem(nil, 0, 1, false).
-			AddItem(modalContent, height+12, 1, true).
+			AddItem(modalContent, height+13, 1, true).
 			AddItem(nil, 0, 1, false), width+10, 1, true).
 		AddItem(nil, 0, 1, false)
 
