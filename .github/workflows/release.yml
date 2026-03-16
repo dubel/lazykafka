@@ -31,6 +31,6 @@ jobs:
           args: release --clean
         env:
           # Needs a Personal Access Token (PAT) with `repo` scope to write to 
-          # the external 'lazykafka-dist' and 'homebrew-tap' repositories.
+          # the external 'lazykafka' and 'homebrew-tap' repositories.
           # Add this as a secret in your PRIVATE repository settings.
           GITHUB_TOKEN: ${{ secrets.GH_PAT_FOR_ACTIONS }}

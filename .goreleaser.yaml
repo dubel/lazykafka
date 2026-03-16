@@ -45,7 +45,7 @@ checksum:
 release:
   github:
     owner: dubel
-    name: lazykafka-dist # MUST be created by you manually
+    name: lazykafka # MUST be created by you manually
   draft: false # Publish immediately to ensure tag-based URLs work
   prerelease: auto
 
@@ -62,7 +62,7 @@ brews:
 
     # The project name and description for the formula
     name: lazykafka
-    homepage: "https://github.com/dubel/lazykafka-dist" # Point to the dist repo since source is private
+    homepage: "https://github.com/dubel/lazykafka" # Point to the dist repo since source is private
     description: "Relaxed Kafka TUI for browsing and managing clusters."
     
     # Packages needed by the formula at runtime/install time
@@ -82,7 +82,7 @@ nfpms:
   -
     maintainer: "lazykafka <https://github.com/dubel/lazykafka>"
     description: "Relaxed Kafka TUI for browsing and managing clusters."
-    homepage: "https://github.com/dubel/lazykafka-dist"
+    homepage: "https://github.com/dubel/lazykafka"
     license: "MIT"
     formats:
       - deb
