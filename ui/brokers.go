@@ -7,9 +7,10 @@ import (
 )
 
 type BrokersPanel struct {
-	App      *App
-	View     tview.Primitive
-	ListView *tview.List
+	App              *App
+	View             tview.Primitive
+	ListView         *tview.List
+	ConnectedAddress string // address of the currently connected broker
 }
 
 func NewBrokersPanel(app *App) *BrokersPanel {
@@ -82,7 +83,13 @@ func (p *BrokersPanel) refreshList() {
 			displayText += " (" + broker.Alias + ")"
 		}
 
-		p.ListView.AddItem(displayText, "", 0, func() {
+		// Highlight the currently connected broker with a teal background
+		itemText := displayText
+		if broker.Address == p.ConnectedAddress {
+			itemText = "[white:teal] " + displayText + " >>connected<< [-:-:-]"
+		}
+
+		p.ListView.AddItem(itemText, "", 0, func() {
 			// On select, connect to broker
 			p.resetStatuses()
 
@@ -98,7 +105,8 @@ func (p *BrokersPanel) refreshList() {
 					if err != nil {
 						p.ListView.SetItemText(index, statusText+" **failed to connect!!**", "")
 					} else {
-						p.ListView.SetItemText(index, statusText+" >>connected<<", "")
+						p.ConnectedAddress = broker.Address
+						p.ListView.SetItemText(index, "[white:teal] "+statusText+" >>connected<< [-:-:-]", "")
 						p.App.TviewApp.SetFocus(p.App.TopicsPanel.View)
 					}
 				})
@@ -222,6 +230,7 @@ func (p *BrokersPanel) removeCurrentBroker() {
 }
 
 func (p *BrokersPanel) resetStatuses() {
+	p.ConnectedAddress = ""
 	for i := 0; i < len(p.App.Config.Brokers); i++ {
 		b := p.App.Config.Brokers[i]
 		text := b.Address

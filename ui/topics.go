@@ -120,15 +120,15 @@ func (p *TopicsPanel) getTopicName(index int) string {
 }
 
 func (p *TopicsPanel) selectTopic(index int) {
-	// Remove marker from previously selected topic
+	// Remove highlight from previously selected topic
 	if p.SelectedIndex >= 0 && p.SelectedIndex < len(p.Topics) {
 		p.ListView.SetItemText(p.SelectedIndex, p.Topics[p.SelectedIndex], "")
 	}
 	// Set new selection
 	p.SelectedIndex = index
-	// Add marker to newly selected topic
+	// Apply teal background highlight to newly selected topic
 	if index >= 0 && index < len(p.Topics) {
-		p.ListView.SetItemText(index, p.Topics[index]+" >> selected <<", "")
+		p.ListView.SetItemText(index, "[white:teal] "+p.Topics[index]+" >> selected << [-:-:-]", "")
 	}
 }
 
@@ -177,7 +177,7 @@ func (p *TopicsPanel) LoadTopics() {
 			displayName := t
 			if t == selectedTopicName {
 				newSelectedIndex = i
-				displayName = t + " >> selected <<"
+				displayName = "[white:teal] " + t + " >> selected << [-:-:-]"
 			}
 			p.ListView.AddItem(displayName, "", 0, nil)
 		}
