@@ -7,9 +7,10 @@ import (
 )
 
 type BrokersPanel struct {
-	App      *App
-	View     tview.Primitive
-	ListView *tview.List
+	App              *App
+	View             tview.Primitive
+	ListView         *tview.List
+	ConnectedAddress string // address of the currently connected broker
 }
 
 func NewBrokersPanel(app *App) *BrokersPanel {
@@ -45,12 +46,42 @@ func NewBrokersPanel(app *App) *BrokersPanel {
 
 	p.refreshList()
 
-	// Set focus handlers on the ListView to update the Flex border
+	// Set focus handlers on the ListView to update the Flex border.
+	// On focus-in, sync plain/teal depending on whether cursor is already on connected broker.
 	p.ListView.SetFocusFunc(func() {
 		flex.SetBorderColor(tcell.ColorGreen)
+		ci := p.connectedBrokerIndex()
+		if ci >= 0 {
+			dt := p.connectedDisplayText(ci)
+			if p.ListView.GetCurrentItem() == ci {
+				p.ListView.SetItemText(ci, dt+" >>connected<<", "")
+			} else {
+				p.ListView.SetItemText(ci, "[white:teal]"+dt+" >>connected<<[-:-:-]", "")
+			}
+		}
 	})
+	// Restore teal when panel loses focus — hover is gone so the tag must carry the colour.
 	p.ListView.SetBlurFunc(func() {
 		flex.SetBorderColor(tcell.ColorWhite)
+		ci := p.connectedBrokerIndex()
+		if ci >= 0 {
+			dt := p.connectedDisplayText(ci)
+			p.ListView.SetItemText(ci, "[white:teal]"+dt+" >>connected<<[-:-:-]", "")
+		}
+	})
+	// As cursor moves: strip teal when landing on connected broker so hover shows;
+	// restore teal as soon as cursor moves elsewhere.
+	p.ListView.SetChangedFunc(func(index int, mainText, secondaryText string, shortcut rune) {
+		ci := p.connectedBrokerIndex()
+		if ci < 0 {
+			return
+		}
+		dt := p.connectedDisplayText(ci)
+		if index == ci {
+			p.ListView.SetItemText(ci, dt+" >>connected<<", "")
+		} else {
+			p.ListView.SetItemText(ci, "[white:teal]"+dt+" >>connected<<[-:-:-]", "")
+		}
 	})
 
 	p.ListView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -82,7 +113,13 @@ func (p *BrokersPanel) refreshList() {
 			displayText += " (" + broker.Alias + ")"
 		}
 
-		p.ListView.AddItem(displayText, "", 0, func() {
+		// Highlight the currently connected broker with a teal background
+		itemText := displayText
+		if broker.Address == p.ConnectedAddress {
+			itemText = "[white:teal]" + displayText + " >>connected<<[-:-:-]"
+		}
+
+		p.ListView.AddItem(itemText, "", 0, func() {
 			// On select, connect to broker
 			p.resetStatuses()
 
@@ -98,6 +135,9 @@ func (p *BrokersPanel) refreshList() {
 					if err != nil {
 						p.ListView.SetItemText(index, statusText+" **failed to connect!!**", "")
 					} else {
+						p.ConnectedAddress = broker.Address
+						// Cursor is still here; plain text so hover is visible.
+						// SetBlurFunc will restore teal when focus moves to Topics.
 						p.ListView.SetItemText(index, statusText+" >>connected<<", "")
 						p.App.TviewApp.SetFocus(p.App.TopicsPanel.View)
 					}
@@ -222,6 +262,7 @@ func (p *BrokersPanel) removeCurrentBroker() {
 }
 
 func (p *BrokersPanel) resetStatuses() {
+	p.ConnectedAddress = ""
 	for i := 0; i < len(p.App.Config.Brokers); i++ {
 		b := p.App.Config.Brokers[i]
 		text := b.Address
@@ -230,4 +271,25 @@ func (p *BrokersPanel) resetStatuses() {
 		}
 		p.ListView.SetItemText(i, text, "")
 	}
+}
+
+func (p *BrokersPanel) connectedBrokerIndex() int {
+	for i, b := range p.App.Config.Brokers {
+		if b.Address == p.ConnectedAddress {
+			return i
+		}
+	}
+	return -1
+}
+
+func (p *BrokersPanel) connectedDisplayText(index int) string {
+	if index < 0 || index >= len(p.App.Config.Brokers) {
+		return ""
+	}
+	broker := p.App.Config.Brokers[index]
+	displayText := broker.Address
+	if broker.Alias != "" {
+		displayText += " (" + broker.Alias + ")"
+	}
+	return displayText
 }

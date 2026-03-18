@@ -43,13 +43,7 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 		flex.SetBorderColor(tcell.ColorWhite)
 	})
 
-	// Set focus handlers on the ListView to update the Flex border
-	listView.SetFocusFunc(func() {
-		flex.SetBorderColor(tcell.ColorGreen)
-	})
-	listView.SetBlurFunc(func() {
-		flex.SetBorderColor(tcell.ColorWhite)
-	})
+	// listView blur handled below after p is created (needs p in scope)
 
 	p := &TopicsPanel{
 		App:           app,
@@ -58,6 +52,42 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 		Footer:        footer,
 		SelectedIndex: -1,
 	}
+
+	// Restore teal when panel loses focus — hover is gone so the tag must carry the colour.
+	p.ListView.SetBlurFunc(func() {
+		flex.SetBorderColor(tcell.ColorWhite)
+		if p.SelectedIndex >= 0 && p.SelectedIndex < len(p.Topics) {
+			p.ListView.SetItemText(p.SelectedIndex,
+				"[white:teal]"+p.Topics[p.SelectedIndex]+" >> selected <<[-:-:-]", "")
+		}
+	})
+
+	// On focus-in the cursor may already be sitting on the selected item — sync immediately.
+	p.ListView.SetFocusFunc(func() {
+		flex.SetBorderColor(tcell.ColorGreen)
+		if p.SelectedIndex >= 0 && p.SelectedIndex < len(p.Topics) {
+			if p.ListView.GetCurrentItem() == p.SelectedIndex {
+				p.ListView.SetItemText(p.SelectedIndex, p.Topics[p.SelectedIndex]+" >> selected <<", "")
+			} else {
+				p.ListView.SetItemText(p.SelectedIndex,
+					"[white:teal]"+p.Topics[p.SelectedIndex]+" >> selected <<[-:-:-]", "")
+			}
+		}
+	})
+
+	// As the cursor moves: strip teal when landing on selected item so the normal
+	// hover highlight shows; restore teal as soon as the cursor moves elsewhere.
+	p.ListView.SetChangedFunc(func(index int, mainText, secondaryText string, shortcut rune) {
+		if p.SelectedIndex < 0 || p.SelectedIndex >= len(p.Topics) {
+			return
+		}
+		if index == p.SelectedIndex {
+			p.ListView.SetItemText(p.SelectedIndex, p.Topics[p.SelectedIndex]+" >> selected <<", "")
+		} else {
+			p.ListView.SetItemText(p.SelectedIndex,
+				"[white:teal]"+p.Topics[p.SelectedIndex]+" >> selected <<[-:-:-]", "")
+		}
+	})
 
 	p.ListView.SetSelectedFunc(func(i int, s1, s2 string, r rune) {
 		topicName := p.getTopicName(i)
@@ -85,6 +115,7 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 		}
 		return event
 	})
+
 
 	// Background refresh
 	go func() {
@@ -120,13 +151,13 @@ func (p *TopicsPanel) getTopicName(index int) string {
 }
 
 func (p *TopicsPanel) selectTopic(index int) {
-	// Remove marker from previously selected topic
+	// Remove highlight from previously selected topic
 	if p.SelectedIndex >= 0 && p.SelectedIndex < len(p.Topics) {
 		p.ListView.SetItemText(p.SelectedIndex, p.Topics[p.SelectedIndex], "")
 	}
-	// Set new selection
 	p.SelectedIndex = index
-	// Add marker to newly selected topic
+	// Cursor is on this item right now — use plain text so the normal hover
+	// highlight is visible. SetBlurFunc will restore teal when focus leaves.
 	if index >= 0 && index < len(p.Topics) {
 		p.ListView.SetItemText(index, p.Topics[index]+" >> selected <<", "")
 	}
@@ -177,7 +208,7 @@ func (p *TopicsPanel) LoadTopics() {
 			displayName := t
 			if t == selectedTopicName {
 				newSelectedIndex = i
-				displayName = t + " >> selected <<"
+				displayName = "[white:teal]" + t + " >> selected <<[-:-:-]"
 			}
 			p.ListView.AddItem(displayName, "", 0, nil)
 		}
