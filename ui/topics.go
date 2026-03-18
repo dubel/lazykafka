@@ -58,7 +58,7 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 		flex.SetBorderColor(tcell.ColorWhite)
 		if p.SelectedIndex >= 0 && p.SelectedIndex < len(p.Topics) {
 			p.ListView.SetItemText(p.SelectedIndex,
-				"[white:teal] "+p.Topics[p.SelectedIndex]+" >> selected << [-:-:-]", "")
+				"[white:teal]"+p.Topics[p.SelectedIndex]+" >> selected <<[-:-:-]", "")
 		}
 	})
 
@@ -70,7 +70,7 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 				p.ListView.SetItemText(p.SelectedIndex, p.Topics[p.SelectedIndex]+" >> selected <<", "")
 			} else {
 				p.ListView.SetItemText(p.SelectedIndex,
-					"[white:teal] "+p.Topics[p.SelectedIndex]+" >> selected << [-:-:-]", "")
+					"[white:teal]"+p.Topics[p.SelectedIndex]+" >> selected <<[-:-:-]", "")
 			}
 		}
 	})
@@ -85,7 +85,7 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 			p.ListView.SetItemText(p.SelectedIndex, p.Topics[p.SelectedIndex]+" >> selected <<", "")
 		} else {
 			p.ListView.SetItemText(p.SelectedIndex,
-				"[white:teal] "+p.Topics[p.SelectedIndex]+" >> selected << [-:-:-]", "")
+				"[white:teal]"+p.Topics[p.SelectedIndex]+" >> selected <<[-:-:-]", "")
 		}
 	})
 
@@ -208,7 +208,7 @@ func (p *TopicsPanel) LoadTopics() {
 			displayName := t
 			if t == selectedTopicName {
 				newSelectedIndex = i
-				displayName = "[white:teal] " + t + " >> selected << [-:-:-]"
+				displayName = "[white:teal]" + t + " >> selected <<[-:-:-]"
 			}
 			p.ListView.AddItem(displayName, "", 0, nil)
 		}

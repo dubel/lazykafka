@@ -56,7 +56,7 @@ func NewBrokersPanel(app *App) *BrokersPanel {
 			if p.ListView.GetCurrentItem() == ci {
 				p.ListView.SetItemText(ci, dt+" >>connected<<", "")
 			} else {
-				p.ListView.SetItemText(ci, "[white:teal] "+dt+" >>connected<< [-:-:-]", "")
+				p.ListView.SetItemText(ci, "[white:teal]"+dt+" >>connected<<[-:-:-]", "")
 			}
 		}
 	})
@@ -66,7 +66,7 @@ func NewBrokersPanel(app *App) *BrokersPanel {
 		ci := p.connectedBrokerIndex()
 		if ci >= 0 {
 			dt := p.connectedDisplayText(ci)
-			p.ListView.SetItemText(ci, "[white:teal] "+dt+" >>connected<< [-:-:-]", "")
+			p.ListView.SetItemText(ci, "[white:teal]"+dt+" >>connected<<[-:-:-]", "")
 		}
 	})
 	// As cursor moves: strip teal when landing on connected broker so hover shows;
@@ -80,7 +80,7 @@ func NewBrokersPanel(app *App) *BrokersPanel {
 		if index == ci {
 			p.ListView.SetItemText(ci, dt+" >>connected<<", "")
 		} else {
-			p.ListView.SetItemText(ci, "[white:teal] "+dt+" >>connected<< [-:-:-]", "")
+			p.ListView.SetItemText(ci, "[white:teal]"+dt+" >>connected<<[-:-:-]", "")
 		}
 	})
 
@@ -116,7 +116,7 @@ func (p *BrokersPanel) refreshList() {
 		// Highlight the currently connected broker with a teal background
 		itemText := displayText
 		if broker.Address == p.ConnectedAddress {
-			itemText = "[white:teal] " + displayText + " >>connected<< [-:-:-]"
+			itemText = "[white:teal]" + displayText + " >>connected<<[-:-:-]"
 		}
 
 		p.ListView.AddItem(itemText, "", 0, func() {
