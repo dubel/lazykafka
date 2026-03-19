@@ -81,6 +81,10 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 		if p.SelectedIndex < 0 || p.SelectedIndex >= len(p.Topics) {
 			return
 		}
+		// Guard against mid-rebuild calls where the list has fewer items than p.Topics.
+		if p.SelectedIndex >= p.ListView.GetItemCount() {
+			return
+		}
 		if index == p.SelectedIndex {
 			p.ListView.SetItemText(p.SelectedIndex, p.Topics[p.SelectedIndex]+" >> selected <<", "")
 		} else {
@@ -196,14 +200,21 @@ func (p *TopicsPanel) LoadTopics() {
 
 	p.App.TviewApp.QueueUpdateDraw(func() {
 		log.Println("LoadTopics: Updating UI list")
-		p.ListView.Clear()
-		p.Topics = topics
-		// Find if previously selected topic still exists
-		var newSelectedIndex = -1
+
+		// Remember the selected topic by name before we tear down the list.
 		var selectedTopicName string
 		if p.SelectedIndex >= 0 && p.SelectedIndex < len(p.Topics) {
 			selectedTopicName = p.Topics[p.SelectedIndex]
 		}
+
+		// Reset SelectedIndex BEFORE clearing so SetChangedFunc (fired by
+		// AddItem mid-rebuild) cannot call SetItemText with a stale index
+		// that is out-of-range for the partially-built list.
+		p.SelectedIndex = -1
+		p.ListView.Clear()
+		p.Topics = topics
+
+		var newSelectedIndex = -1
 		for i, t := range topics {
 			displayName := t
 			if t == selectedTopicName {
