@@ -53,12 +53,12 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 		SelectedIndex: -1,
 	}
 
-	// Restore teal when panel loses focus — hover is gone so the tag must carry the colour.
+	// Restore green highlight when panel loses focus — hover is gone so the tag must carry the colour (green).
 	p.ListView.SetBlurFunc(func() {
 		flex.SetBorderColor(tcell.ColorWhite)
 		if p.SelectedIndex >= 0 && p.SelectedIndex < len(p.Topics) {
 			p.ListView.SetItemText(p.SelectedIndex,
-				"[white:teal]"+p.Topics[p.SelectedIndex]+" >> selected <<[-:-:-]", "")
+				"[white:green]"+p.Topics[p.SelectedIndex]+" >> selected <<[-:-:-]", "")
 		}
 	})
 
@@ -70,13 +70,13 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 				p.ListView.SetItemText(p.SelectedIndex, p.Topics[p.SelectedIndex]+" >> selected <<", "")
 			} else {
 				p.ListView.SetItemText(p.SelectedIndex,
-					"[white:teal]"+p.Topics[p.SelectedIndex]+" >> selected <<[-:-:-]", "")
+					"[white:green]"+p.Topics[p.SelectedIndex]+" >> selected <<[-:-:-]", "")
 			}
 		}
 	})
 
-	// As the cursor moves: strip teal when landing on selected item so the normal
-	// hover highlight shows; restore teal as soon as the cursor moves elsewhere.
+	// As the cursor moves: strip highlight when landing on selected item so the normal
+	// hover highlight shows; restore green highlight as soon as the cursor moves elsewhere.
 	p.ListView.SetChangedFunc(func(index int, mainText, secondaryText string, shortcut rune) {
 		if p.SelectedIndex < 0 || p.SelectedIndex >= len(p.Topics) {
 			return
@@ -89,7 +89,7 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 			p.ListView.SetItemText(p.SelectedIndex, p.Topics[p.SelectedIndex]+" >> selected <<", "")
 		} else {
 			p.ListView.SetItemText(p.SelectedIndex,
-				"[white:teal]"+p.Topics[p.SelectedIndex]+" >> selected <<[-:-:-]", "")
+				"[white:green]"+p.Topics[p.SelectedIndex]+" >> selected <<[-:-:-]", "")
 		}
 	})
 
@@ -161,7 +161,7 @@ func (p *TopicsPanel) selectTopic(index int) {
 	}
 	p.SelectedIndex = index
 	// Cursor is on this item right now — use plain text so the normal hover
-	// highlight is visible. SetBlurFunc will restore teal when focus leaves.
+	// highlight is visible. SetBlurFunc will restore green highlight when focus leaves.
 	if index >= 0 && index < len(p.Topics) {
 		p.ListView.SetItemText(index, p.Topics[index]+" >> selected <<", "")
 	}
@@ -219,7 +219,7 @@ func (p *TopicsPanel) LoadTopics() {
 			displayName := t
 			if t == selectedTopicName {
 				newSelectedIndex = i
-				displayName = "[white:teal]" + t + " >> selected <<[-:-:-]"
+				displayName = "[white:green]" + t + " >> selected <<[-:-:-]"
 			}
 			p.ListView.AddItem(displayName, "", 0, nil)
 		}

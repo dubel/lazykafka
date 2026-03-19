@@ -56,20 +56,20 @@ func NewBrokersPanel(app *App) *BrokersPanel {
 			if p.ListView.GetCurrentItem() == ci {
 				p.ListView.SetItemText(ci, dt+" >>connected<<", "")
 			} else {
-				p.ListView.SetItemText(ci, "[white:teal]"+dt+" >>connected<<[-:-:-]", "")
+				p.ListView.SetItemText(ci, "[white:green]"+dt+" >>connected<<[-:-:-]", "")
 			}
 		}
 	})
-	// Restore teal when panel loses focus — hover is gone so the tag must carry the colour.
+	// Restore green highlight when panel loses focus — hover is gone so the tag must carry the colour (green).
 	p.ListView.SetBlurFunc(func() {
 		flex.SetBorderColor(tcell.ColorWhite)
 		ci := p.connectedBrokerIndex()
 		if ci >= 0 {
 			dt := p.connectedDisplayText(ci)
-			p.ListView.SetItemText(ci, "[white:teal]"+dt+" >>connected<<[-:-:-]", "")
+			p.ListView.SetItemText(ci, "[white:green]"+dt+" >>connected<<[-:-:-]", "")
 		}
 	})
-	// As cursor moves: strip teal when landing on connected broker so hover shows;
+	// As cursor moves: strip highlight when landing on connected broker so hover shows;
 	// restore teal as soon as cursor moves elsewhere.
 	p.ListView.SetChangedFunc(func(index int, mainText, secondaryText string, shortcut rune) {
 		ci := p.connectedBrokerIndex()
@@ -80,7 +80,7 @@ func NewBrokersPanel(app *App) *BrokersPanel {
 		if index == ci {
 			p.ListView.SetItemText(ci, dt+" >>connected<<", "")
 		} else {
-			p.ListView.SetItemText(ci, "[white:teal]"+dt+" >>connected<<[-:-:-]", "")
+			p.ListView.SetItemText(ci, "[white:green]"+dt+" >>connected<<[-:-:-]", "")
 		}
 	})
 
@@ -113,10 +113,10 @@ func (p *BrokersPanel) refreshList() {
 			displayText += " (" + broker.Alias + ")"
 		}
 
-		// Highlight the currently connected broker with a teal background
+		// Highlight the currently connected broker with a green background
 		itemText := displayText
 		if broker.Address == p.ConnectedAddress {
-			itemText = "[white:teal]" + displayText + " >>connected<<[-:-:-]"
+			itemText = "[white:green]" + displayText + " >>connected<<[-:-:-]"
 		}
 
 		p.ListView.AddItem(itemText, "", 0, func() {
@@ -137,7 +137,7 @@ func (p *BrokersPanel) refreshList() {
 					} else {
 						p.ConnectedAddress = broker.Address
 						// Cursor is still here; plain text so hover is visible.
-						// SetBlurFunc will restore teal when focus moves to Topics.
+						// SetBlurFunc will restore green highlight when focus moves to Topics.
 						p.ListView.SetItemText(index, statusText+" >>connected<<", "")
 						p.App.TviewApp.SetFocus(p.App.TopicsPanel.View)
 					}
