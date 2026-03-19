@@ -1,9 +1,12 @@
 package ui
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/dubel/lazykafka/config"
 	"github.com/dubel/lazykafka/kafka"
@@ -22,10 +25,11 @@ type App struct {
 	ConsumePanel *ConsumePanel
 	ProducePanel *ProducePanel
 
-	KafkaManager *kafka.Manager
-	ManagerMutex sync.RWMutex
-	InModal      bool
-	Version      string
+	KafkaManager       *kafka.Manager
+	ManagerMutex       sync.RWMutex
+	InModal            bool
+	Version            string
+	healthCheckCancel  context.CancelFunc
 }
 
 func NewApp(version string) *App {
@@ -150,6 +154,9 @@ func (a *App) setupNavigation() {
 func (a *App) ConnectToBroker(broker string) error {
 	log.Printf("ConnectToBroker: Starting connection to broker: %s", broker)
 
+	// Cancel any running health-check before replacing the connection.
+	a.stopHealthCheck()
+
 	// Stop any active consumption
 	a.ConsumePanel.StopConsuming()
 	log.Println("ConnectToBroker: Stopped any active consumption")
@@ -189,6 +196,9 @@ func (a *App) ConnectToBroker(broker string) error {
 	a.ManagerMutex.Lock()
 	a.KafkaManager = manager
 	a.ManagerMutex.Unlock()
+
+	// Monitor the new connection in the background.
+	a.startHealthCheck(broker)
 
 	log.Println("ConnectToBroker: Successfully connected, loading topics")
 	a.TopicsPanel.LoadTopics()
@@ -239,3 +249,132 @@ func (a *App) showSplashScreen() {
 	a.InModal = true
 	a.TviewApp.SetRoot(splash.Flex, true)
 }
+
+// startHealthCheck launches a background goroutine that pings the connected
+// broker every 5 seconds.  On the first failure it calls handleConnectionLost.
+func (a *App) startHealthCheck(brokerAddress string) {
+	a.stopHealthCheck() // ensure no previous check is still running
+
+	ctx, cancel := context.WithCancel(context.Background())
+	a.healthCheckCancel = cancel
+
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				a.ManagerMutex.RLock()
+				mgr := a.KafkaManager
+				a.ManagerMutex.RUnlock()
+				if mgr == nil {
+					return // manager already gone, nothing to monitor
+				}
+				if err := mgr.Client.CheckConnection(); err != nil {
+					log.Printf("HealthCheck: connection to %s lost: %v", brokerAddress, err)
+					a.handleConnectionLost(brokerAddress)
+					return
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
+// stopHealthCheck cancels any running health-check goroutine.
+func (a *App) stopHealthCheck() {
+	if a.healthCheckCancel != nil {
+		a.healthCheckCancel()
+		a.healthCheckCancel = nil
+	}
+}
+
+// handleConnectionLost tears down the broken connection, clears all dependent
+// UI state, and shows a dismissible modal alerting the user.
+func (a *App) handleConnectionLost(brokerAddress string) {
+	// Guard against duplicate invocations.
+	a.ManagerMutex.Lock()
+	if a.KafkaManager == nil {
+		a.ManagerMutex.Unlock()
+		return
+	}
+	a.KafkaManager.Close()
+	a.KafkaManager = nil
+	a.ManagerMutex.Unlock()
+
+	// Stop any active consumption (safe to call from a goroutine).
+	a.ConsumePanel.StopConsuming()
+
+	a.TviewApp.QueueUpdateDraw(func() {
+		// --- Topics panel ---
+		a.TopicsPanel.ListView.Clear()
+		a.TopicsPanel.Topics = []string{}
+		a.TopicsPanel.SelectedIndex = -1
+
+		// --- Consume panel ---
+		a.ConsumePanel.TextView.Clear()
+		a.ConsumePanel.CurrentTopic = ""
+		if flex, ok := a.ConsumePanel.View.(*tview.Flex); ok {
+			flex.SetTitle("Consume (F3)")
+		}
+
+		// --- Produce panel ---
+		a.ProducePanel.TextArea.SetText("", true)
+		a.ProducePanel.CurrentTopic = ""
+		if flex, ok := a.ProducePanel.View.(*tview.Flex); ok {
+			flex.SetTitle("Produce (F4)")
+		}
+
+		// --- Brokers panel ---
+		a.BrokersPanel.ConnectedAddress = ""
+		a.BrokersPanel.refreshList()
+
+		// Show the modal unless another modal is already on screen.
+		if !a.InModal {
+			a.showConnectionLostModal(brokerAddress)
+		}
+	})
+}
+
+// showConnectionLostModal renders a small centered modal over a dark background.
+// It is dismissed by any key press, after which focus returns to the Brokers panel.
+func (a *App) showConnectionLostModal(brokerAddress string) {
+	message := fmt.Sprintf(
+		"[red]Connection to broker\n\n[white::b]%s[red::-]\n\nhas been lost.\n\n"+
+			"[white]Please re-connect via the Brokers panel.\n\n"+
+			"[gray](press any key to dismiss)",
+		brokerAddress,
+	)
+
+	textView := tview.NewTextView().
+		SetText(message).
+		SetTextAlign(tview.AlignCenter).
+		SetDynamicColors(true)
+
+	textView.SetBorder(true).
+		SetTitle("  ⚠  Connection Lost  ⚠  ").
+		SetTitleAlign(tview.AlignCenter).
+		SetBorderColor(tcell.ColorRed)
+
+	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		a.InModal = false
+		a.TviewApp.SetRoot(a.Grid, true)
+		a.TviewApp.SetFocus(a.BrokersPanel.View)
+		return nil
+	})
+
+	// Centre the box: proportional spacers on all four sides.
+	modal := tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(textView, 11, 0, true).
+			AddItem(nil, 0, 1, false),
+			62, 0, true).
+		AddItem(nil, 0, 1, false)
+
+	a.InModal = true
+	a.TviewApp.SetRoot(modal, true)
+}
+
