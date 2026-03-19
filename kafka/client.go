@@ -17,6 +17,10 @@ func NewClient(brokers []string) (*Client, error) {
 	config.Consumer.Return.Errors = true
 	config.Producer.Return.Successes = true
 	config.Net.DialTimeout = 5 * time.Second
+	// Keep read/write timeouts short so health-checks detect a dead broker quickly
+	// rather than hanging for sarama's 30-second default.
+	config.Net.ReadTimeout = 10 * time.Second
+	config.Net.WriteTimeout = 10 * time.Second
 
 	client, err := sarama.NewClient(brokers, config)
 	if err != nil {
@@ -47,3 +51,10 @@ func (c *Client) GetPartitions(topic string) ([]int32, error) {
 func (c *Client) RefreshMetadata() error {
 	return c.saramaClient.RefreshMetadata()
 }
+
+// CheckConnection verifies the broker is still reachable by refreshing metadata.
+// Returns nil when healthy, a non-nil error when the broker cannot be reached.
+func (c *Client) CheckConnection() error {
+	return c.saramaClient.RefreshMetadata()
+}
+
