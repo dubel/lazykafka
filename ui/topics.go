@@ -35,7 +35,8 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 		SetDynamicColors(true)
 
 	searchInput := tview.NewInputField().
-		SetLabel("[teal::b]/ Search: [-::-]").
+		SetLabel("🔍 Search: ").
+		SetLabelColor(tcell.ColorTeal).
 		SetFieldWidth(0)
 
 	flex := tview.NewFlex().
