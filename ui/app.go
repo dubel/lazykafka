@@ -141,8 +141,25 @@ func (a *App) setupNavigation() {
 			return nil
 		}
 
-		// Exit application on Escape
+		// Escape: if Topics search is active, clear it instead of exiting.
 		if event.Key() == tcell.KeyEscape {
+			focus := a.TviewApp.GetFocus()
+
+			// If the search input is focused, hide it and return to the list.
+			if focus == a.TopicsPanel.SearchInput {
+				a.TopicsPanel.MainFlex.ResizeItem(a.TopicsPanel.SearchInput, 0, 0)
+				a.TviewApp.SetFocus(a.TopicsPanel.ListView)
+				return nil
+			}
+
+			// If the topics list is focused and a filter is active, clear the filter.
+			if (focus == a.TopicsPanel.View || focus == a.TopicsPanel.ListView) && a.TopicsPanel.SearchQuery != "" {
+				a.TopicsPanel.SearchQuery = ""
+				a.TopicsPanel.rebuildList()
+				a.TopicsPanel.Footer.SetText(a.TopicsPanel.defaultFooterText())
+				return nil
+			}
+
 			a.TviewApp.Stop()
 			return nil
 		}
@@ -309,8 +326,12 @@ func (a *App) handleConnectionLost(brokerAddress string) {
 	a.TviewApp.QueueUpdateDraw(func() {
 		// --- Topics panel ---
 		a.TopicsPanel.ListView.Clear()
+		a.TopicsPanel.AllTopics = []string{}
 		a.TopicsPanel.Topics = []string{}
 		a.TopicsPanel.SelectedIndex = -1
+		a.TopicsPanel.SelectedTopic = ""
+		a.TopicsPanel.SearchQuery = ""
+		a.TopicsPanel.Footer.SetText(a.TopicsPanel.defaultFooterText())
 
 		// --- Consume panel ---
 		a.ConsumePanel.TextView.Clear()

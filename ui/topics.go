@@ -3,6 +3,7 @@ package ui
 import (
 	"log"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -14,23 +15,34 @@ type TopicsPanel struct {
 	View          tview.Primitive
 	ListView      *tview.List
 	Footer        *tview.TextView
+	SearchInput   *tview.InputField
+	MainFlex      *tview.Flex
 	ResetTimer    *time.Timer
-	Topics        []string
-	SelectedIndex int
+	AllTopics     []string // full sorted list from Kafka
+	Topics        []string // displayed (filtered) list
+	SelectedTopic string   // name of selected topic, stable across reloads/filter changes
+	SelectedIndex int      // index into Topics (displayed list)
+	SearchQuery   string   // active filter text; empty = no filter
+	dropNextRune  bool     // swallow first rune after search input gets focus
 }
 
 func NewTopicsPanel(app *App) *TopicsPanel {
 	listView := tview.NewList()
 
 	footer := tview.NewTextView().
-		SetText("(a)dd | (r)emove | re(f)resh | (enter) to select").
+		SetText("(/) search | (a)dd | (r)emove | re(f)resh | (enter) to select").
 		SetTextAlign(tview.AlignCenter).
 		SetDynamicColors(true)
 
+	searchInput := tview.NewInputField().
+		SetLabel("[teal::b]/ Search: [-::-]").
+		SetFieldWidth(0)
+
 	flex := tview.NewFlex().
 		SetDirection(tview.FlexRow).
+		AddItem(searchInput, 0, 0, false). // hidden initially (height 0)
 		AddItem(listView, 0, 1, true).
-		AddItem(footer, 1, 0, false)
+		AddItem(footer, 2, 0, false)
 
 	flex.SetBorder(true).
 		SetTitle("Topics (F2)").
@@ -50,6 +62,8 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 		View:          flex,
 		ListView:      listView,
 		Footer:        footer,
+		SearchInput:   searchInput,
+		MainFlex:      flex,
 		SelectedIndex: -1,
 	}
 
@@ -101,7 +115,7 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 		app.TviewApp.SetFocus(app.ConsumePanel.View)
 	})
 
-	// Handle key presses for add/remove/refresh
+	// Handle key presses for add/remove/refresh/search
 	p.ListView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
 		case 'a':
@@ -116,8 +130,39 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 			log.Println("Refreshing topics...")
 			go p.LoadTopics()
 			return nil
+		case '/':
+			p.showSearchInput()
+			return nil
 		}
 		return event
+	})
+
+
+	// Swallow the '/' rune that leaks into the search input when focus
+	// switches mid-event-dispatch, then force-clear the field.
+	searchInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if p.dropNextRune {
+			p.dropNextRune = false
+			p.SearchInput.SetText("")
+			return nil
+		}
+		return event
+	})
+
+	// Search input: Enter applies filter, Escape cancels without changing filter.
+	searchInput.SetDoneFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyEnter:
+			p.SearchQuery = strings.TrimSpace(searchInput.GetText())
+			// Already in the UI goroutine — call directly, never QueueUpdateDraw here.
+			p.MainFlex.ResizeItem(p.SearchInput, 0, 0)
+			p.rebuildList()
+			p.Footer.SetText(p.defaultFooterText())
+			p.App.TviewApp.SetFocus(p.ListView)
+		case tcell.KeyEscape:
+			p.MainFlex.ResizeItem(p.SearchInput, 0, 0)
+			p.App.TviewApp.SetFocus(p.ListView)
+		}
 	})
 
 
@@ -133,6 +178,64 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 	return p
 }
 
+// showSearchInput reveals the search bar and focuses it.
+// The '/' rune is already consumed by ListView's InputCapture (returns nil),
+// so it will not leak into the search input field.
+func (p *TopicsPanel) showSearchInput() {
+	p.SearchInput.SetText("")
+	p.dropNextRune = true
+	p.MainFlex.ResizeItem(p.SearchInput, 1, 0)
+	p.App.TviewApp.SetFocus(p.SearchInput)
+}
+
+// defaultFooterText returns the footer text reflecting current filter state.
+func (p *TopicsPanel) defaultFooterText() string {
+	if p.SearchQuery != "" {
+		return `[teal]Filter: "` + p.SearchQuery + `"[-] | (/) new | (ESC) clear` + "\n" +
+			`(a)dd | (r)emove | re(f)resh | (enter) to select`
+	}
+	return "(/) search | (a)dd | (r)emove | re(f)resh | (enter) to select"
+}
+
+// filteredTopics returns AllTopics filtered by SearchQuery (case-insensitive contains).
+func (p *TopicsPanel) filteredTopics() []string {
+	if p.SearchQuery == "" {
+		return p.AllTopics
+	}
+	q := strings.ToLower(p.SearchQuery)
+	var result []string
+	for _, t := range p.AllTopics {
+		if strings.Contains(strings.ToLower(t), q) {
+			result = append(result, t)
+		}
+	}
+	return result
+}
+
+// rebuildList re-renders the list view from AllTopics + current SearchQuery.
+// Must be called from the UI goroutine (inside QueueUpdateDraw or equivalent).
+func (p *TopicsPanel) rebuildList() {
+	filtered := p.filteredTopics()
+
+	// Reset SelectedIndex before clearing to avoid stale-index panics in SetChangedFunc.
+	p.SelectedIndex = -1
+	p.ListView.Clear()
+	p.Topics = filtered
+
+	newSelectedIndex := -1
+	for i, t := range filtered {
+		if t == p.SelectedTopic {
+			newSelectedIndex = i
+		}
+		displayName := t
+		if i == newSelectedIndex {
+			displayName = "[white:green]" + t + " >> selected <<[-:-:-]"
+		}
+		p.ListView.AddItem(displayName, "", 0, nil)
+	}
+	p.SelectedIndex = newSelectedIndex
+}
+
 func (p *TopicsPanel) showTemporaryMessage(msg string, duration time.Duration) {
 	p.Footer.SetText(msg)
 
@@ -142,7 +245,8 @@ func (p *TopicsPanel) showTemporaryMessage(msg string, duration time.Duration) {
 
 	p.ResetTimer = time.AfterFunc(duration, func() {
 		p.App.TviewApp.QueueUpdateDraw(func() {
-			p.Footer.SetText("(a)dd | (r)emove | re(f)resh | (enter) to select")
+			p.ResetTimer = nil
+			p.Footer.SetText(p.defaultFooterText())
 		})
 	})
 }
@@ -160,10 +264,13 @@ func (p *TopicsPanel) selectTopic(index int) {
 		p.ListView.SetItemText(p.SelectedIndex, p.Topics[p.SelectedIndex], "")
 	}
 	p.SelectedIndex = index
-	// Cursor is on this item right now — use plain text so the normal hover
-	// highlight is visible. SetBlurFunc will restore green highlight when focus leaves.
 	if index >= 0 && index < len(p.Topics) {
+		p.SelectedTopic = p.Topics[index]
+		// Cursor is on this item right now — use plain text so the normal hover
+		// highlight is visible. SetBlurFunc will restore green highlight when focus leaves.
 		p.ListView.SetItemText(index, p.Topics[index]+" >> selected <<", "")
+	} else {
+		p.SelectedTopic = ""
 	}
 }
 
@@ -200,30 +307,8 @@ func (p *TopicsPanel) LoadTopics() {
 
 	p.App.TviewApp.QueueUpdateDraw(func() {
 		log.Println("LoadTopics: Updating UI list")
-
-		// Remember the selected topic by name before we tear down the list.
-		var selectedTopicName string
-		if p.SelectedIndex >= 0 && p.SelectedIndex < len(p.Topics) {
-			selectedTopicName = p.Topics[p.SelectedIndex]
-		}
-
-		// Reset SelectedIndex BEFORE clearing so SetChangedFunc (fired by
-		// AddItem mid-rebuild) cannot call SetItemText with a stale index
-		// that is out-of-range for the partially-built list.
-		p.SelectedIndex = -1
-		p.ListView.Clear()
-		p.Topics = topics
-
-		var newSelectedIndex = -1
-		for i, t := range topics {
-			displayName := t
-			if t == selectedTopicName {
-				newSelectedIndex = i
-				displayName = "[white:green]" + t + " >> selected <<[-:-:-]"
-			}
-			p.ListView.AddItem(displayName, "", 0, nil)
-		}
-		p.SelectedIndex = newSelectedIndex
+		p.AllTopics = topics
+		p.rebuildList()
 		log.Println("LoadTopics: UI update complete")
 	})
 	log.Println("LoadTopics: Queued UI update")
@@ -325,7 +410,10 @@ func (p *TopicsPanel) deleteSelectedTopic() {
 		return
 	}
 
-	topicName, _ := p.ListView.GetItemText(idx)
+	topicName := p.getTopicName(idx)
+	if topicName == "" {
+		return
+	}
 	log.Printf("UI: Requesting deletion of topic: %s", topicName)
 
 	go func() {
