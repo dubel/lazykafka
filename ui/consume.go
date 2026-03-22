@@ -109,6 +109,7 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 	}
 
 	p.CurrentTopic = topic
+	p.LastMessage = ""
 	p.TextView.Clear()
 	status := "New Messages"
 	if p.FromBeginning {
