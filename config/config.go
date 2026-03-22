@@ -63,8 +63,9 @@ func SaveConfig(cfg *Config) error {
 }
 
 type Settings struct {
-	ShowSplashOnStartup bool `json:"show_splash_on_startup"`
-	CheckForUpdates     bool `json:"check_for_updates"`
+	ShowSplashOnStartup bool   `json:"show_splash_on_startup"`
+	CheckForUpdates     bool   `json:"check_for_updates"`
+	LastFilePickerDir   string `json:"last_file_picker_dir,omitempty"`
 }
 
 func LoadSettings() (*Settings, error) {

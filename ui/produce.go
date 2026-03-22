@@ -24,7 +24,7 @@ func NewProducePanel(app *App) *ProducePanel {
 	textArea.SetWordWrap(true)
 
 	footer := tview.NewTextView().
-		SetText("(alt+enter) or (ctrl+s) to send").
+		SetText("(alt+enter/ctrl+s) send | (ctrl+p) publish file").
 		SetTextAlign(tview.AlignCenter).
 		SetDynamicColors(true)
 
@@ -60,6 +60,12 @@ func NewProducePanel(app *App) *ProducePanel {
 	}
 
 	p.TextArea.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Ctrl+P to open file picker
+		if event.Key() == tcell.KeyCtrlP {
+			p.openFilePicker()
+			return nil
+		}
+
 		// Alt+Enter or Ctrl+S to send message
 		isAltEnter := event.Key() == tcell.KeyEnter && event.Modifiers()&tcell.ModAlt != 0
 		isCtrlS := event.Key() == tcell.KeyCtrlS
@@ -115,7 +121,7 @@ func (p *ProducePanel) showTemporaryMessage(msg string, duration time.Duration) 
 
 	p.ResetTimer = time.AfterFunc(duration, func() {
 		p.App.TviewApp.QueueUpdateDraw(func() {
-			p.Footer.SetText("(alt+enter) or (ctrl+s) to send")
+			p.Footer.SetText("(alt+enter/ctrl+s) send | (ctrl+p) publish file")
 		})
 	})
 }
@@ -126,3 +132,5 @@ func (p *ProducePanel) SetTopic(topic string) {
 		flex.SetTitle("Produce (F4) - " + topic)
 	}
 }
+
+
