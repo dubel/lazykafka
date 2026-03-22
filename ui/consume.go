@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os/exec"
@@ -180,9 +181,17 @@ func (p *ConsumePanel) copyLastMessageToClipboard() {
 		return
 	}
 
-	if err := writeToClipboard(p.LastMessage); err != nil {
+	progName, err := writeToClipboard(p.LastMessage)
+	if err != nil {
 		log.Printf("copyLastMessageToClipboard: clipboard error: %v", err)
-		p.showTemporaryFooter("[red]Failed to copy to clipboard", 2*time.Second)
+		if errors.Is(err, exec.ErrNotFound) {
+			p.showTemporaryFooter(
+				fmt.Sprintf("[red]clipboard program (%s) was not found installed", progName),
+				5*time.Second,
+			)
+		} else {
+			p.showTemporaryFooter("[red]Failed to copy to clipboard", 2*time.Second)
+		}
 		return
 	}
 
@@ -206,20 +215,35 @@ func (p *ConsumePanel) showTemporaryFooter(msg string, duration time.Duration) {
 	})
 }
 
-// writeToClipboard writes text to the system clipboard using OS-specific commands.
-func writeToClipboard(text string) error {
-	var cmd *exec.Cmd
+// clipboardProgram returns the clipboard command name and args for the current OS.
+func clipboardProgram() (name string, args []string, err error) {
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("pbcopy")
+		return "pbcopy", nil, nil
 	case "linux":
-		cmd = exec.Command("xclip", "-selection", "clipboard")
+		return "xclip", []string{"-selection", "clipboard"}, nil
 	case "windows":
-		cmd = exec.Command("clip")
+		return "clip", nil, nil
 	default:
-		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+		return "", nil, fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
+}
+
+// writeToClipboard writes text to the system clipboard using OS-specific commands.
+// Returns the program name (for error reporting) and any error encountered.
+func writeToClipboard(text string) (string, error) {
+	progName, args, err := clipboardProgram()
+	if err != nil {
+		return progName, err
+	}
+
+	// Check that the clipboard binary actually exists on this system.
+	if _, err := exec.LookPath(progName); err != nil {
+		return progName, exec.ErrNotFound
+	}
+
+	cmd := exec.Command(progName, args...)
 	cmd.Stdin = strings.NewReader(text)
-	return cmd.Run()
+	return progName, cmd.Run()
 }
 
