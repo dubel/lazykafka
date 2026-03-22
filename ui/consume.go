@@ -4,6 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os/exec"
+	"runtime"
+	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -13,9 +17,12 @@ type ConsumePanel struct {
 	App           *App
 	View          tview.Primitive
 	TextView      *tview.TextView
+	Footer        *tview.TextView
+	ResetTimer    *time.Timer
 	CurrentTopic  string
 	FromBeginning bool
 	cancelFunc    context.CancelFunc // Replaces StopChan for cleaner cancellation
+	LastMessage   string             // last consumed message, used for copy-to-clipboard
 }
 
 func NewConsumePanel(app *App) *ConsumePanel {
@@ -28,7 +35,7 @@ func NewConsumePanel(app *App) *ConsumePanel {
 	})
 
 	footer := tview.NewTextView().
-		SetText("(t)oggle from beginning").
+		SetText("(t)oggle from beginning | (c)opy last msg").
 		SetTextAlign(tview.AlignCenter).
 		SetDynamicColors(true)
 
@@ -52,6 +59,7 @@ func NewConsumePanel(app *App) *ConsumePanel {
 		App:      app,
 		View:     flex,
 		TextView: textView,
+		Footer:   footer,
 	}
 
 	// Set focus handlers on the TextView to update the Flex border
@@ -63,7 +71,8 @@ func NewConsumePanel(app *App) *ConsumePanel {
 	})
 
 	p.TextView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Rune() == 't' {
+		switch event.Rune() {
+		case 't':
 			p.FromBeginning = !p.FromBeginning
 			status := "New Messages"
 			if p.FromBeginning {
@@ -78,6 +87,9 @@ func NewConsumePanel(app *App) *ConsumePanel {
 			if p.CurrentTopic != "" {
 				p.StartConsuming(p.CurrentTopic)
 			}
+			return nil
+		case 'c':
+			p.copyLastMessageToClipboard()
 			return nil
 		}
 		return event
@@ -131,6 +143,7 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 			select {
 			case msg := <-messages:
 				messageCount++
+				p.LastMessage = msg
 				if messageCount%100 == 0 {
 					log.Printf("StartConsuming: Received %d messages from topic: %s", messageCount, topic)
 				}
@@ -158,3 +171,54 @@ func (p *ConsumePanel) StopConsuming() {
 		p.cancelFunc = nil
 	}
 }
+
+// copyLastMessageToClipboard copies the last consumed message to the system clipboard.
+func (p *ConsumePanel) copyLastMessageToClipboard() {
+	if p.LastMessage == "" {
+		p.showTemporaryFooter("[yellow]No messages to copy", 2*time.Second)
+		return
+	}
+
+	if err := writeToClipboard(p.LastMessage); err != nil {
+		log.Printf("copyLastMessageToClipboard: clipboard error: %v", err)
+		p.showTemporaryFooter("[red]Failed to copy to clipboard", 2*time.Second)
+		return
+	}
+
+	log.Printf("copyLastMessageToClipboard: copied %d bytes to clipboard", len(p.LastMessage))
+	p.showTemporaryFooter("[green]Copied last message to clipboard!", 2*time.Second)
+}
+
+// showTemporaryFooter shows a temporary message in the footer, then restores it.
+func (p *ConsumePanel) showTemporaryFooter(msg string, duration time.Duration) {
+	p.Footer.SetText(msg)
+
+	if p.ResetTimer != nil {
+		p.ResetTimer.Stop()
+	}
+
+	p.ResetTimer = time.AfterFunc(duration, func() {
+		p.App.TviewApp.QueueUpdateDraw(func() {
+			p.ResetTimer = nil
+			p.Footer.SetText("(t)oggle from beginning | (c)opy last msg")
+		})
+	})
+}
+
+// writeToClipboard writes text to the system clipboard using OS-specific commands.
+func writeToClipboard(text string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("pbcopy")
+	case "linux":
+		cmd = exec.Command("xclip", "-selection", "clipboard")
+	case "windows":
+		cmd = exec.Command("clip")
+	default:
+		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+	}
+	cmd.Stdin = strings.NewReader(text)
+	return cmd.Run()
+}
+
