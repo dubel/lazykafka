@@ -144,8 +144,11 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 	searchInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if p.dropNextRune {
 			p.dropNextRune = false
-			p.SearchInput.SetText("")
-			return nil
+			// Only swallow the leaked '/' — let real keystrokes through.
+			if event.Rune() == '/' {
+				p.SearchInput.SetText("")
+				return nil
+			}
 		}
 		return event
 	})
