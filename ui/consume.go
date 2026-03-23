@@ -2,9 +2,11 @@ package ui
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -175,28 +177,44 @@ func (p *ConsumePanel) StopConsuming() {
 }
 
 // copyLastMessageToClipboard copies the last consumed message to the system clipboard.
+// The actual clipboard write runs in a goroutine so it never blocks the UI.
 func (p *ConsumePanel) copyLastMessageToClipboard() {
 	if p.LastMessage == "" {
 		p.showTemporaryFooter("[yellow]No messages to copy", 2*time.Second)
 		return
 	}
 
-	progName, err := writeToClipboard(p.LastMessage)
-	if err != nil {
-		log.Printf("copyLastMessageToClipboard: clipboard error: %v", err)
-		if errors.Is(err, exec.ErrNotFound) {
-			p.showTemporaryFooter(
-				fmt.Sprintf("[red]clipboard program (%s) was not found installed", progName),
-				5*time.Second,
-			)
-		} else {
-			p.showTemporaryFooter("[red]Failed to copy to clipboard", 2*time.Second)
-		}
-		return
-	}
+	msg := p.LastMessage // snapshot for the goroutine
+	p.showTemporaryFooter("[yellow]Copying...", 10*time.Second)
 
-	log.Printf("copyLastMessageToClipboard: copied %d bytes to clipboard", len(p.LastMessage))
-	p.showTemporaryFooter("[green]Copied last message to clipboard!", 2*time.Second)
+	go func() {
+		progName, err := writeToClipboard(msg)
+
+		p.App.TviewApp.QueueUpdateDraw(func() {
+			if err != nil {
+				log.Printf("copyLastMessageToClipboard: clipboard error: %v", err)
+				if errors.Is(err, exec.ErrNotFound) {
+					p.showTemporaryFooter(
+						"[red]No clipboard program found (install xclip, xsel, or wl-copy)",
+						5*time.Second,
+					)
+				} else {
+					p.showTemporaryFooter(
+						fmt.Sprintf("[red]Clipboard failed: %v", err),
+						5*time.Second,
+					)
+				}
+				return
+			}
+
+			log.Printf("copyLastMessageToClipboard: copied %d bytes via %s", len(msg), progName)
+			if progName == "OSC52" {
+				p.showTemporaryFooter("[green]Copied via OSC52 (requires terminal support)", 3*time.Second)
+			} else {
+				p.showTemporaryFooter("[green]Copied last message to clipboard!", 2*time.Second)
+			}
+		})
+	}()
 }
 
 // showTemporaryFooter shows a temporary message in the footer, then restores it.
@@ -215,35 +233,158 @@ func (p *ConsumePanel) showTemporaryFooter(msg string, duration time.Duration) {
 	})
 }
 
-// clipboardProgram returns the clipboard command name and args for the current OS.
-func clipboardProgram() (name string, args []string, err error) {
+// clipboardCandidate describes a clipboard program and whether it forks.
+type clipboardCandidate struct {
+	name  string
+	args  []string
+	forks bool // true if the program forks to serve clipboard (e.g. wl-copy)
+}
+
+// clipboardCandidates returns an ordered list of clipboard programs to try for the current OS.
+// On Linux we try multiple backends: wl-copy (Wayland), xsel, xclip.
+func clipboardCandidates() []clipboardCandidate {
 	switch runtime.GOOS {
 	case "darwin":
-		return "pbcopy", nil, nil
+		return []clipboardCandidate{{"pbcopy", nil, false}}
 	case "linux":
-		return "xclip", []string{"-selection", "clipboard"}, nil
+		return []clipboardCandidate{
+			{"wl-copy", nil, true},                                       // Wayland — forks to serve clipboard
+			{"xsel", []string{"--clipboard", "--input"}, false},          // X11 (xsel)
+			{"xclip", []string{"-selection", "clipboard", "-in"}, false}, // X11 (xclip)
+		}
 	case "windows":
-		return "clip", nil, nil
+		return []clipboardCandidate{{"clip", nil, false}}
 	default:
-		return "", nil, fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+		return nil
 	}
 }
 
 // writeToClipboard writes text to the system clipboard using OS-specific commands.
+// On Linux it tries multiple clipboard backends in order, then falls back to
+// OSC 52 escape sequence which works over SSH sessions.
 // Returns the program name (for error reporting) and any error encountered.
 func writeToClipboard(text string) (string, error) {
-	progName, args, err := clipboardProgram()
-	if err != nil {
-		return progName, err
+	candidates := clipboardCandidates()
+
+	var lastErr error
+	var lastProg string
+
+	for _, c := range candidates {
+		if _, err := exec.LookPath(c.name); err != nil {
+			continue // not installed, try next
+		}
+
+		var err error
+		if c.forks {
+			err = startForkingClipboard(c.name, c.args, text)
+		} else {
+			err = runClipboardCmd(c.name, c.args, text)
+		}
+
+		if err != nil {
+			lastErr = fmt.Errorf("%s: %w", c.name, err)
+			lastProg = c.name
+			log.Printf("writeToClipboard: %s failed: %v", c.name, lastErr)
+			continue
+		}
+
+		return c.name, nil
 	}
 
-	// Check that the clipboard binary actually exists on this system.
-	if _, err := exec.LookPath(progName); err != nil {
-		return progName, exec.ErrNotFound
+	// All native clipboard programs failed or are missing — try OSC 52.
+	if err := tryOSC52(text); err != nil {
+		log.Printf("writeToClipboard: OSC 52 fallback failed: %v", err)
+		if lastErr != nil {
+			return lastProg, lastErr
+		}
+		return "OSC52", err
 	}
 
-	cmd := exec.Command(progName, args...)
+	return "OSC52", nil
+}
+
+// runClipboardCmd runs a clipboard program that exits after reading stdin (pbcopy, xsel, xclip).
+func runClipboardCmd(name string, args []string, text string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdin = strings.NewReader(text)
-	return progName, cmd.Run()
+
+	devNull, _ := os.Open(os.DevNull)
+	if devNull != nil {
+		cmd.Stderr = devNull
+		defer devNull.Close()
+	}
+
+	return cmd.Run()
+}
+
+// startForkingClipboard handles clipboard programs like wl-copy that fork a child
+// to serve the clipboard. We pipe stdin, close it, and let the process live —
+// we must NOT call cmd.Wait() or the forked child will block us.
+func startForkingClipboard(name string, args []string, text string) error {
+	cmd := exec.Command(name, args...)
+
+	// Get a pipe to stdin so we can write and close it
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("stdin pipe: %w", err)
+	}
+
+	// Detach stderr/stdout so forked child doesn't hold Go pipes open
+	devNull, _ := os.Open(os.DevNull)
+	if devNull != nil {
+		cmd.Stderr = devNull
+		cmd.Stdout = devNull
+	}
+
+	if err := cmd.Start(); err != nil {
+		if devNull != nil {
+			devNull.Close()
+		}
+		return fmt.Errorf("start: %w", err)
+	}
+
+	// Write content and close stdin — wl-copy reads it, then forks to background
+	if _, err := stdin.Write([]byte(text)); err != nil {
+		if devNull != nil {
+			devNull.Close()
+		}
+		return fmt.Errorf("write: %w", err)
+	}
+	stdin.Close()
+
+	// Wait in a goroutine so we don't leak, but don't block the caller.
+	// The parent process exits quickly once stdin is closed; the forked
+	// child keeps serving the clipboard independently.
+	go func() {
+		_ = cmd.Wait()
+		if devNull != nil {
+			devNull.Close()
+		}
+	}()
+
+	return nil
+}
+
+// tryOSC52 writes an OSC 52 escape sequence to the controlling terminal.
+// The sequence format is: ESC ] 52 ; c ; <base64-payload> ESC \
+// The terminal emulator processes this and sets the system clipboard.
+func tryOSC52(text string) error {
+	encoded := base64.StdEncoding.EncodeToString([]byte(text))
+
+	// Write directly to /dev/tty so it reaches the terminal emulator
+	// even while tview/tcell owns stdout.
+	tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
+	if err != nil {
+		// Fallback: try stdout (works on some systems / inside tmux)
+		_, err2 := fmt.Fprintf(os.Stdout, "\033]52;c;%s\033\\", encoded)
+		return err2
+	}
+	defer tty.Close()
+
+	_, err = fmt.Fprintf(tty, "\033]52;c;%s\033\\", encoded)
+	return err
 }
 
