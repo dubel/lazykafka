@@ -170,12 +170,17 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 	})
 
 
-	// Background refresh
+	// Background refresh — only poll when connected.
 	go func() {
 		ticker := time.NewTicker(300 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			p.LoadTopics()
+			p.App.ManagerMutex.RLock()
+			connected := p.App.KafkaManager != nil
+			p.App.ManagerMutex.RUnlock()
+			if connected {
+				p.LoadTopics()
+			}
 		}
 	}()
 
