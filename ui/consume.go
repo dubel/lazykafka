@@ -2,9 +2,11 @@ package ui
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -175,28 +177,44 @@ func (p *ConsumePanel) StopConsuming() {
 }
 
 // copyLastMessageToClipboard copies the last consumed message to the system clipboard.
+// The actual clipboard write runs in a goroutine so it never blocks the UI.
 func (p *ConsumePanel) copyLastMessageToClipboard() {
 	if p.LastMessage == "" {
 		p.showTemporaryFooter("[yellow]No messages to copy", 2*time.Second)
 		return
 	}
 
-	progName, err := writeToClipboard(p.LastMessage)
-	if err != nil {
-		log.Printf("copyLastMessageToClipboard: clipboard error: %v", err)
-		if errors.Is(err, exec.ErrNotFound) {
-			p.showTemporaryFooter(
-				fmt.Sprintf("[red]clipboard program (%s) was not found installed", progName),
-				5*time.Second,
-			)
-		} else {
-			p.showTemporaryFooter("[red]Failed to copy to clipboard", 2*time.Second)
-		}
-		return
-	}
+	msg := p.LastMessage // snapshot for the goroutine
+	p.showTemporaryFooter("[yellow]Copying...", 10*time.Second)
 
-	log.Printf("copyLastMessageToClipboard: copied %d bytes to clipboard", len(p.LastMessage))
-	p.showTemporaryFooter("[green]Copied last message to clipboard!", 2*time.Second)
+	go func() {
+		progName, err := writeToClipboard(msg)
+
+		p.App.TviewApp.QueueUpdateDraw(func() {
+			if err != nil {
+				log.Printf("copyLastMessageToClipboard: clipboard error: %v", err)
+				if errors.Is(err, exec.ErrNotFound) {
+					p.showTemporaryFooter(
+						"[red]No clipboard program found (install xclip, xsel, or wl-copy)",
+						5*time.Second,
+					)
+				} else {
+					p.showTemporaryFooter(
+						fmt.Sprintf("[red]Clipboard failed: %v", err),
+						5*time.Second,
+					)
+				}
+				return
+			}
+
+			log.Printf("copyLastMessageToClipboard: copied %d bytes via %s", len(msg), progName)
+			if progName == "OSC52" {
+				p.showTemporaryFooter("[green]Copied via OSC52 (requires terminal support)", 3*time.Second)
+			} else {
+				p.showTemporaryFooter("[green]Copied last message to clipboard!", 2*time.Second)
+			}
+		})
+	}()
 }
 
 // showTemporaryFooter shows a temporary message in the footer, then restores it.
@@ -215,35 +233,108 @@ func (p *ConsumePanel) showTemporaryFooter(msg string, duration time.Duration) {
 	})
 }
 
-// clipboardProgram returns the clipboard command name and args for the current OS.
-func clipboardProgram() (name string, args []string, err error) {
+// clipboardCandidates returns an ordered list of clipboard programs to try for the current OS.
+// On Linux we try multiple backends: wl-copy (Wayland), xsel, xclip.
+func clipboardCandidates() []struct {
+	name string
+	args []string
+} {
 	switch runtime.GOOS {
 	case "darwin":
-		return "pbcopy", nil, nil
+		return []struct {
+			name string
+			args []string
+		}{{"pbcopy", nil}}
 	case "linux":
-		return "xclip", []string{"-selection", "clipboard"}, nil
+		return []struct {
+			name string
+			args []string
+		}{
+			{"wl-copy", nil},                                      // Wayland
+			{"xsel", []string{"--clipboard", "--input"}},          // X11 (xsel)
+			{"xclip", []string{"-selection", "clipboard", "-in"}}, // X11 (xclip)
+		}
 	case "windows":
-		return "clip", nil, nil
+		return []struct {
+			name string
+			args []string
+		}{{"clip", nil}}
 	default:
-		return "", nil, fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+		return nil
 	}
 }
 
 // writeToClipboard writes text to the system clipboard using OS-specific commands.
+// On Linux it tries multiple clipboard backends in order, then falls back to
+// OSC 52 escape sequence which works over SSH sessions.
 // Returns the program name (for error reporting) and any error encountered.
 func writeToClipboard(text string) (string, error) {
-	progName, args, err := clipboardProgram()
+	candidates := clipboardCandidates()
+
+	// Timeout prevents any clipboard program from hanging indefinitely.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	var lastErr error
+	var lastProg string
+
+	for _, c := range candidates {
+		if _, err := exec.LookPath(c.name); err != nil {
+			continue // not installed, try next
+		}
+
+		cmd := exec.CommandContext(ctx, c.name, c.args...)
+		cmd.Stdin = strings.NewReader(text)
+
+		// Capture stderr for diagnostics
+		var stderr strings.Builder
+		cmd.Stderr = &stderr
+
+		if err := cmd.Run(); err != nil {
+			lastErr = fmt.Errorf("%s: %w (stderr: %s)", c.name, err, strings.TrimSpace(stderr.String()))
+			lastProg = c.name
+			log.Printf("writeToClipboard: %s failed: %v", c.name, lastErr)
+			continue // try next candidate
+		}
+
+		// Success
+		return c.name, nil
+	}
+
+	// All native clipboard programs failed or are missing — try OSC 52.
+	// OSC 52 is a terminal escape sequence that tells the *local* terminal
+	// emulator (the one the user is looking at) to set its clipboard.
+	// It works transparently through SSH because the escape bytes travel
+	// through the SSH channel to the client terminal.
+	if err := tryOSC52(text); err != nil {
+		log.Printf("writeToClipboard: OSC 52 fallback failed: %v", err)
+		// Return the most informative error we have
+		if lastErr != nil {
+			return lastProg, lastErr
+		}
+		return "OSC52", err
+	}
+
+	return "OSC52", nil
+}
+
+// tryOSC52 writes an OSC 52 escape sequence to the controlling terminal.
+// The sequence format is: ESC ] 52 ; c ; <base64-payload> ESC \
+// The terminal emulator processes this and sets the system clipboard.
+func tryOSC52(text string) error {
+	encoded := base64.StdEncoding.EncodeToString([]byte(text))
+
+	// Write directly to /dev/tty so it reaches the terminal emulator
+	// even while tview/tcell owns stdout.
+	tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
 	if err != nil {
-		return progName, err
+		// Fallback: try stdout (works on some systems / inside tmux)
+		_, err2 := fmt.Fprintf(os.Stdout, "\033]52;c;%s\033\\", encoded)
+		return err2
 	}
+	defer tty.Close()
 
-	// Check that the clipboard binary actually exists on this system.
-	if _, err := exec.LookPath(progName); err != nil {
-		return progName, exec.ErrNotFound
-	}
-
-	cmd := exec.Command(progName, args...)
-	cmd.Stdin = strings.NewReader(text)
-	return progName, cmd.Run()
+	_, err = fmt.Fprintf(tty, "\033]52;c;%s\033\\", encoded)
+	return err
 }
 
