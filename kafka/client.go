@@ -121,3 +121,26 @@ func (c *Client) CheckConnection() error {
 	return c.saramaClient.RefreshMetadata()
 }
 
+func (c *Client) Leader(topic string, partition int32) (*sarama.Broker, error) {
+	return c.saramaClient.Leader(topic, partition)
+}
+
+func (c *Client) Replicas(topic string, partition int32) ([]int32, error) {
+	return c.saramaClient.Replicas(topic, partition)
+}
+
+func (c *Client) InSyncReplicas(topic string, partition int32) ([]int32, error) {
+	return c.saramaClient.InSyncReplicas(topic, partition)
+}
+
+func (c *Client) GetOffset(topic string, partition int32, time int64) (int64, error) {
+	return c.saramaClient.GetOffset(topic, partition, time)
+}
+
+func (c *Client) BrokersList() []*sarama.Broker {
+	return c.saramaClient.Brokers()
+}
+
+func (c *Client) Controller() (*sarama.Broker, error) {
+	return c.saramaClient.Controller()
+}
