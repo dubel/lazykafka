@@ -419,3 +419,32 @@ func (m *Manager) DeleteTopic(topic string) error {
 	log.Printf("Manager.DeleteTopic: Successfully deleted topic '%s'", topic)
 	return nil
 }
+
+func (m *Manager) DeleteConsumerGroup(group string) error {
+	log.Printf("Manager.DeleteConsumerGroup: Starting deletion of group '%s'", group)
+
+	// Use a separate admin client to avoid closing the shared client
+	log.Printf("Manager.DeleteConsumerGroup: Creating new ClusterAdmin connection to brokers: %v", m.Client.Brokers)
+	admin, err := sarama.NewClusterAdmin(m.Client.Brokers, m.getAdminConfig())
+	if err != nil {
+		log.Printf("Manager.DeleteConsumerGroup: ERROR - Failed to create ClusterAdmin: %v", err)
+		return err
+	}
+	defer func() {
+		log.Println("Manager.DeleteConsumerGroup: Closing ClusterAdmin")
+		if err := admin.Close(); err != nil {
+			log.Printf("Manager.DeleteConsumerGroup: Warning - Failed to close ClusterAdmin: %v", err)
+		}
+	}()
+
+	log.Printf("Manager.DeleteConsumerGroup: Sending DeleteConsumerGroup request for '%s'", group)
+	err = admin.DeleteConsumerGroup(group)
+
+	if err != nil {
+		log.Printf("Manager.DeleteConsumerGroup: ERROR - Failed to delete consumer group: %v", err)
+		return err
+	}
+
+	log.Printf("Manager.DeleteConsumerGroup: Successfully deleted consumer group '%s'", group)
+	return nil
+}
