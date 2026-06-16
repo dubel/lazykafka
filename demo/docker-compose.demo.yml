@@ -48,3 +48,18 @@ services:
     entrypoint: ["/bin/bash", "/seed-demo.sh"]
     environment:
       KAFKA_BROKER: kafka-demo:9092
+
+  # Long-running container: publishes live measurement data every 3-5 s.
+  kafka-demo-live-producer:
+    image: apache/kafka:3.7.0
+    container_name: lazykafka-demo-live-producer
+    restart: unless-stopped
+    depends_on:
+      kafka-demo-seed:
+        condition: service_completed_successfully
+    volumes:
+      - ./live-producer.sh:/live-producer.sh:ro
+    entrypoint: ["/bin/bash", "/live-producer.sh"]
+    environment:
+      KAFKA_BROKER: kafka-demo:9092
+
