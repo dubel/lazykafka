@@ -1,4 +1,4 @@
-.PHONY: build run test test-integration kafka-up kafka-down demo-up demo-down clean publish
+.PHONY: build run test test-integration kafka-up kafka-down demo-up demo-down demo-infra-cleanup clean publish
 
 # Build the application
 build:
@@ -43,7 +43,12 @@ demo-up:
 
 # Stop demo Kafka and remove volumes
 demo-down:
-	docker compose -f demo/docker-compose.demo.yml down -v
+	docker compose -f demo/docker-compose.demo.yml down
+
+# Completely wipe out demo Kafka state, containers, networks, and volumes
+demo-infra-cleanup:
+	docker compose -f demo/docker-compose.demo.yml down -v --remove-orphans
+
 
 # Clean build artifacts
 clean:
