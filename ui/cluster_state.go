@@ -12,6 +12,12 @@ import (
 
 // showClusterState opens a full-screen view with cluster health and consumer group lag.
 func (p *BrokersPanel) showClusterState() {
+	p.showClusterStateOnPage(0)
+}
+
+// showClusterStateOnPage is like showClusterState but opens a specific tab.
+// Page indices: 0 = topics, 1 = groups, 2 = config.
+func (p *BrokersPanel) showClusterStateOnPage(initialPage int) {
 	p.App.InModal = true
 
 	loading := tview.NewTextView().
@@ -50,7 +56,7 @@ func (p *BrokersPanel) showClusterState() {
 		}
 
 		p.App.TviewApp.QueueUpdateDraw(func() {
-			p.renderClusterState(state)
+			p.renderClusterState(state, initialPage)
 		})
 	}()
 }
@@ -73,7 +79,12 @@ func (p *BrokersPanel) showClusterError(msg string) {
 	p.App.TviewApp.SetRoot(tv, true)
 }
 
-func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState) {
+func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState, initialPage ...int) {
+	// Determine which tab to show initially (default: topics = 0).
+	startPage := 0
+	if len(initialPage) > 0 && initialPage[0] >= 0 && initialPage[0] < 3 {
+		startPage = initialPage[0]
+	}
 	// ── Broker table ──
 	brokerTable := tview.NewTable().
 		SetBorders(false).
@@ -279,11 +290,12 @@ func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState) {
 	pageTables := []*tview.Table{topicTable, groupTable, configTable}
 
 	pages := tview.NewPages().
-		AddPage("topics", topicTable, true, true).
-		AddPage("groups", groupTable, true, false).
-		AddPage("config", configTable, true, false)
+		AddPage("topics", topicTable, true, startPage == 0).
+		AddPage("groups", groupTable, true, startPage == 1).
+		AddPage("config", configTable, true, startPage == 2)
 
-	currentPageIdx := 0
+	currentPageIdx := startPage
+	pages.SwitchToPage(pageNames[currentPageIdx])
 
 	// Keep a reference to the groups data for delete operations.
 	groups := state.ConsumerGroups
@@ -366,7 +378,7 @@ func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState) {
 		AddItem(footer, 1, 0, false)
 
 	p.App.TviewApp.SetRoot(layout, true)
-	p.App.TviewApp.SetFocus(topicTable)
+	p.App.TviewApp.SetFocus(pageTables[currentPageIdx])
 }
 
 // deleteSelectedConsumerGroup handles the 'r' key on the groups page.
@@ -413,8 +425,8 @@ func (p *BrokersPanel) deleteSelectedConsumerGroup(groupTable *tview.Table, grou
 	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyEscape:
-			// Cancel — return to the cluster state view.
-			p.renderClusterState(state)
+			// Cancel — return to the cluster state view on the groups page.
+			p.renderClusterState(state, 1)
 			return nil
 		case tcell.KeyEnter:
 			// Confirm — perform the delete.
@@ -468,9 +480,9 @@ func (p *BrokersPanel) executeDeleteConsumerGroup(groupName string) {
 		}
 
 		log.Printf("UI: Successfully deleted consumer group: %s", groupName)
-		// Refresh the cluster state view to reflect the deletion.
+		// Refresh the cluster state view on the groups page to reflect the deletion.
 		p.App.TviewApp.QueueUpdateDraw(func() {
-			p.showClusterState()
+			p.showClusterStateOnPage(1)
 		})
 	}()
 }
@@ -488,7 +500,7 @@ func (p *BrokersPanel) showClusterMessage(message, title string, borderColor tce
 		SetBorderColor(borderColor)
 
 	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		p.renderClusterState(state)
+		p.renderClusterState(state, 1)
 		return nil
 	})
 
