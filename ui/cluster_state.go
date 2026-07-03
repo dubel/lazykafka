@@ -288,6 +288,12 @@ func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState) {
 	// Keep a reference to the groups data for delete operations.
 	groups := state.ConsumerGroups
 
+	// ── Footer ── (declared early so the updateFooter closure can reference it)
+	footer := tview.NewTextView().
+		SetText("(Esc) close | (r) refresh | (Tab) cycle: offsets → groups → config | (↑/↓) scroll").
+		SetTextAlign(tview.AlignCenter).
+		SetDynamicColors(true)
+
 	// Helper: update footer text based on the active page.
 	updateFooter := func() {
 		base := "(Esc) close | (r) refresh | (Tab) cycle: offsets → groups → config | (↑/↓) scroll"
@@ -345,11 +351,6 @@ func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState) {
 	groupTable.SetInputCapture(capture)
 	configTable.SetInputCapture(capture)
 
-	// ── Footer ──
-	footer := tview.NewTextView().
-		SetText("(Esc) close | (r) refresh | (Tab) cycle: offsets → groups → config | (↑/↓) scroll").
-		SetTextAlign(tview.AlignCenter).
-		SetDynamicColors(true)
 	updateFooter()
 
 	// ── Layout ──
