@@ -356,6 +356,14 @@ func (m *Manager) getAdminConfig() *sarama.Config {
 	config := sarama.NewConfig()
 	config.Version = sarama.V2_8_0_0
 	config.Net.DialTimeout = 5 * time.Second
+
+	// Use the same fallback dialer as the main client to avoid DNS timeouts
+	// when contacting advertised listener addresses (e.g. kafka-0).
+	if len(m.Client.Brokers) > 0 {
+		config.Net.Proxy.Enable = true
+		config.Net.Proxy.Dialer = newBootstrapFallbackDialer(m.Client.Brokers[0], config.Net.DialTimeout)
+	}
+
 	return config
 }
 
