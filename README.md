@@ -52,3 +52,64 @@ Go to the releases page, download the .rpm file, and run:
 Go to the releases page, download the .pkg.tar.zst file, and run:
 
     sudo pacman -U lazykafka_*.pkg.tar.zst
+
+### Running in a Container
+
+If you want to run Lazykafka directly within your Docker or Kubernetes cluster to easily resolve internal service names and connect to your Kafka brokers without exposing them externally, you can use the following one-line commands. 
+
+Since these commands run interactively (`-it`), **they will immediately open the Lazykafka TUI** in your terminal. Once you quit the application, the ephemeral container/pod will be automatically removed (`--rm`).
+
+**Docker / Docker Swarm**
+```bash
+docker run -it --rm --network=<your_network_name> ghcr.io/dubel/lazykafka
+```
+*(Tip: You can find your network name by running `docker network ls`. Use the network that your Kafka brokers are attached to.)*
+
+**Kubernetes**
+```bash
+kubectl run lazykafka -it --rm --image=ghcr.io/dubel/lazykafka --restart=Never
+```
+*(Tip: In Kubernetes, you don't need to specify a network. The pod automatically uses the cluster's internal DNS. If your Kafka cluster is in a specific namespace, just append `-n <namespace>` to the command.)*
+
+**(Optional) Logging into a Shell**
+
+If you prefer to start a shell inside the container (e.g., for debugging) and trigger `lazykafka` manually, you can override the default command/entrypoint:
+
+**Docker:**
+```bash
+docker run -it --rm --entrypoint sh --network=<your_network_name> ghcr.io/dubel/lazykafka
+```
+
+**Kubernetes:**
+```bash
+kubectl run lazykafka-shell -it --rm --image=ghcr.io/dubel/lazykafka --restart=Never --command -- sh
+```
+
+### Running a Persistent Container (Background)
+
+If you'd prefer to keep a persistent jumpbox container always running in your cluster so you can quickly log into it whenever needed, you can deploy a container that runs in the background and `exec` into it to trigger the TUI.
+
+#### Kubernetes
+
+1. **Deploy the persistent pod:**
+   ```bash
+   kubectl run lazykafka-persistent --image=ghcr.io/dubel/lazykafka --restart=Always --command -- sleep infinity
+   ```
+
+2. **Access the TUI anytime:**
+   ```bash
+   kubectl exec -it lazykafka-persistent -- lazykafka
+   ```
+
+#### Docker / Docker Swarm
+
+1. **Deploy the persistent container** (attached to your network):
+   ```bash
+   docker run -d --name lazykafka-persistent --network=<your_network_name> --entrypoint sleep ghcr.io/dubel/lazykafka infinity
+   ```
+   *(Note: For Docker Swarm, running this standard container on a node with access to your overlay network is usually the simplest way to maintain a persistent entrypoint).*
+
+2. **Access the TUI anytime:**
+   ```bash
+   docker exec -it lazykafka-persistent lazykafka
+   ```
