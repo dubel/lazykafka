@@ -1,4 +1,4 @@
-.PHONY: build run test test-integration kafka-up kafka-down clean publish
+.PHONY: build run test test-integration kafka-up kafka-down demo-up demo-down demo-infra-cleanup clean publish
 
 # Build the application
 build:
@@ -29,6 +29,26 @@ kafka-up:
 # Stop Kafka
 kafka-down:
 	docker compose down
+
+# Start demo Kafka pre-loaded with sample topics & messages (for screenshots / recordings)
+# Also starts a live producer that continuously publishes to contemporary-measurements-data.
+demo-up:
+	docker compose -f demo/docker-compose.demo.yml up -d
+	@echo "Demo Kafka starting on localhost:19092"
+	@echo "Waiting for broker + seed + live producer..."
+	@timeout 90 bash -c 'until docker compose -f demo/docker-compose.demo.yml ps | grep -q "lazykafka-demo-live-producer"; do sleep 2; done' || true
+	@echo ""
+	@echo "Demo environment is ready! Connect lazykafka to localhost:19092"
+	@echo "Live producer is publishing to contemporary-measurements-data every 3-5s."
+
+# Stop demo Kafka and remove volumes
+demo-down:
+	docker compose -f demo/docker-compose.demo.yml down
+
+# Completely wipe out demo Kafka state, containers, networks, and volumes
+demo-infra-cleanup:
+	docker compose -f demo/docker-compose.demo.yml down -v --remove-orphans
+
 
 # Clean build artifacts
 clean:

@@ -1,0 +1,65 @@
+# Demo Kafka environment for lazykafka screenshots / recordings.
+# Brings up a single-node KRaft broker pre-loaded with realistic topics & messages.
+#
+# Usage (through Makefile):
+#   make demo-up     # Start broker + seed data
+#   make demo-down   # Tear everything down
+
+services:
+  kafka-demo:
+    image: apache/kafka:3.7.0
+    container_name: lazykafka-demo-kafka
+    ports:
+      - "19092:19092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:19092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-demo:9092,EXTERNAL://localhost:19092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      # Keep log segments small so demo data is visible quickly
+      KAFKA_LOG_SEGMENT_BYTES: 1048576
+      KAFKA_LOG_RETENTION_HOURS: 168
+    healthcheck:
+      test: [ "CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # One-shot init container: creates topics and publishes seed messages.
+  kafka-demo-seed:
+    image: apache/kafka:3.7.0
+    container_name: lazykafka-demo-seed
+    depends_on:
+      kafka-demo:
+        condition: service_healthy
+    volumes:
+      - ./seed-demo.sh:/seed-demo.sh:ro
+    entrypoint: ["/bin/bash", "/seed-demo.sh"]
+    environment:
+      KAFKA_BROKER: kafka-demo:9092
+
+  # Long-running container: publishes live measurement data every 3-5 s.
+  kafka-demo-live-producer:
+    image: apache/kafka:3.7.0
+    container_name: lazykafka-demo-live-producer
+    restart: unless-stopped
+    depends_on:
+      kafka-demo-seed:
+        condition: service_completed_successfully
+    volumes:
+      - ./live-producer.sh:/live-producer.sh:ro
+    entrypoint: ["/bin/bash", "/live-producer.sh"]
+    environment:
+      KAFKA_BROKER: kafka-demo:9092
+
