@@ -40,6 +40,7 @@ demo-up:
 	@echo ""
 	@echo "Demo environment is ready! Connect lazykafka to localhost:19092"
 	@echo "Live producer is publishing to contemporary-measurements-data every 3-5s."
+	@echo "3 consumer groups seeded: order-processing-service, analytics-pipeline, notification-dispatcher"
 
 # Stop demo Kafka and remove volumes
 demo-down:
