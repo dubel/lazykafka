@@ -218,4 +218,53 @@ produce "iot-device-status" \
 echo ""
 echo "==> Demo seeding complete!"
 echo "    Topics: ${#TOPICS[@]}"
+
+# ─── Consumer groups ──────────────────────────────────────────────────
+# Create 3 consumer groups by consuming a few messages with --group.
+# Each consumer reads a small subset of messages and then exits, leaving
+# the group in "Empty" state with committed offsets.  Because the topics
+# have more messages than we consume, the groups will show realistic lag
+# in the cluster state view.
+
+create_consumer_group() {
+  local group="$1"
+  local topic="$2"
+  local max_messages="${3:-1}"
+
+  "$KAFKA_BIN/kafka-console-consumer.sh" \
+    --bootstrap-server "$BROKER" \
+    --topic "$topic" \
+    --group "$group" \
+    --from-beginning \
+    --max-messages "$max_messages" \
+    --timeout-ms 10000 \
+    >/dev/null 2>&1 || true
+}
+
+echo ""
+echo "==> Creating demo consumer groups..."
+
+# Group 1: order-processing-service — subscribed to multiple order topics
+create_consumer_group "order-processing-service" "orders-created" 2
+create_consumer_group "order-processing-service" "orders-confirmed" 1
+create_consumer_group "order-processing-service" "payments-completed" 1
+echo "    ✓ order-processing-service  (orders-created, orders-confirmed, payments-completed)"
+
+# Group 2: analytics-pipeline — subscribed to analytics topics, partially caught up
+create_consumer_group "analytics-pipeline" "analytics-page-views" 2
+create_consumer_group "analytics-pipeline" "analytics-click-events" 1
+create_consumer_group "analytics-pipeline" "analytics-conversions" 1
+echo "    ✓ analytics-pipeline  (analytics-page-views, analytics-click-events, analytics-conversions)"
+
+# Group 3: notification-dispatcher — subscribed to all notification channels
+create_consumer_group "notification-dispatcher" "notifications-email" 1
+create_consumer_group "notification-dispatcher" "notifications-sms" 1
+create_consumer_group "notification-dispatcher" "notifications-push" 1
+echo "    ✓ notification-dispatcher  (notifications-email, notifications-sms, notifications-push)"
+
+echo ""
+echo "==> Demo environment ready!"
+echo "    Topics: ${#TOPICS[@]}"
+echo "    Consumer groups: 3 (order-processing-service, analytics-pipeline, notification-dispatcher)"
 echo "    Connect lazykafka to localhost:19092 to explore."
+

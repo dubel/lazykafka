@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"log"
 	"sort"
 
 	"github.com/dubel/lazykafka/kafka"
@@ -11,6 +12,12 @@ import (
 
 // showClusterState opens a full-screen view with cluster health and consumer group lag.
 func (p *BrokersPanel) showClusterState() {
+	p.showClusterStateOnPage(0)
+}
+
+// showClusterStateOnPage is like showClusterState but opens a specific tab.
+// Page indices: 0 = topics, 1 = groups, 2 = config.
+func (p *BrokersPanel) showClusterStateOnPage(initialPage int) {
 	p.App.InModal = true
 
 	loading := tview.NewTextView().
@@ -49,7 +56,7 @@ func (p *BrokersPanel) showClusterState() {
 		}
 
 		p.App.TviewApp.QueueUpdateDraw(func() {
-			p.renderClusterState(state)
+			p.renderClusterState(state, initialPage)
 		})
 	}()
 }
@@ -72,7 +79,12 @@ func (p *BrokersPanel) showClusterError(msg string) {
 	p.App.TviewApp.SetRoot(tv, true)
 }
 
-func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState) {
+func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState, initialPage ...int) {
+	// Determine which tab to show initially (default: topics = 0).
+	startPage := 0
+	if len(initialPage) > 0 && initialPage[0] >= 0 && initialPage[0] < 3 {
+		startPage = initialPage[0]
+	}
 	// ── Broker table ──
 	brokerTable := tview.NewTable().
 		SetBorders(false).
@@ -278,11 +290,30 @@ func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState) {
 	pageTables := []*tview.Table{topicTable, groupTable, configTable}
 
 	pages := tview.NewPages().
-		AddPage("topics", topicTable, true, true).
-		AddPage("groups", groupTable, true, false).
-		AddPage("config", configTable, true, false)
+		AddPage("topics", topicTable, true, startPage == 0).
+		AddPage("groups", groupTable, true, startPage == 1).
+		AddPage("config", configTable, true, startPage == 2)
 
-	currentPageIdx := 0
+	currentPageIdx := startPage
+	pages.SwitchToPage(pageNames[currentPageIdx])
+
+	// Keep a reference to the groups data for delete operations.
+	groups := state.ConsumerGroups
+
+	// ── Footer ── (declared early so the updateFooter closure can reference it)
+	footer := tview.NewTextView().
+		SetText("(Esc) close | (r) refresh | (Tab) cycle: offsets → groups → config | (↑/↓) scroll").
+		SetTextAlign(tview.AlignCenter).
+		SetDynamicColors(true)
+
+	// Helper: update footer text based on the active page.
+	updateFooter := func() {
+		base := "(Esc) close | (r) refresh | (Tab) cycle: offsets → groups → config | (↑/↓) scroll"
+		if pageNames[currentPageIdx] == "groups" && hasGroups {
+			base = "(Esc) close | (r) remove group | (f) refresh | (Tab) cycle: offsets → groups → config | (↑/↓) scroll"
+		}
+		footer.SetText(base)
+	}
 
 	// Shared input handler for all three tables.
 	makeInputCapture := func() func(event *tcell.EventKey) *tcell.EventKey {
@@ -293,7 +324,19 @@ func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState) {
 				p.App.TviewApp.SetFocus(p.App.BrokersPanel.View)
 				return nil
 			}
+			// 'r' is context-sensitive: on the groups page it removes,
+			// on all other pages it refreshes the cluster state view.
 			if event.Rune() == 'r' {
+				if pageNames[currentPageIdx] == "groups" && hasGroups {
+					p.deleteSelectedConsumerGroup(groupTable, groups, state)
+					return nil
+				}
+				p.showClusterState()
+				return nil
+			}
+			// 'f' always refreshes (available on all pages, required on groups
+			// page where 'r' is used for remove).
+			if event.Rune() == 'f' {
 				p.showClusterState()
 				return nil
 			}
@@ -301,12 +344,14 @@ func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState) {
 				currentPageIdx = (currentPageIdx + 1) % len(pageNames)
 				pages.SwitchToPage(pageNames[currentPageIdx])
 				p.App.TviewApp.SetFocus(pageTables[currentPageIdx])
+				updateFooter()
 				return nil
 			}
 			if event.Key() == tcell.KeyBacktab {
 				currentPageIdx = (currentPageIdx + len(pageNames) - 1) % len(pageNames)
 				pages.SwitchToPage(pageNames[currentPageIdx])
 				p.App.TviewApp.SetFocus(pageTables[currentPageIdx])
+				updateFooter()
 				return nil
 			}
 			return event
@@ -318,11 +363,7 @@ func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState) {
 	groupTable.SetInputCapture(capture)
 	configTable.SetInputCapture(capture)
 
-	// ── Footer ──
-	footer := tview.NewTextView().
-		SetText("(Esc) close | (r) refresh | (Tab) cycle: offsets → groups → config | (↑/↓) scroll").
-		SetTextAlign(tview.AlignCenter).
-		SetDynamicColors(true)
+	updateFooter()
 
 	// ── Layout ──
 	brokerRows := len(state.Brokers) + 3
@@ -337,6 +378,141 @@ func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState) {
 		AddItem(footer, 1, 0, false)
 
 	p.App.TviewApp.SetRoot(layout, true)
-	p.App.TviewApp.SetFocus(topicTable)
+	p.App.TviewApp.SetFocus(pageTables[currentPageIdx])
+}
+
+// deleteSelectedConsumerGroup handles the 'r' key on the groups page.
+// It checks for active members and shows a confirmation modal before deleting.
+func (p *BrokersPanel) deleteSelectedConsumerGroup(groupTable *tview.Table, groups []kafka.ConsumerGroupInfo, state *kafka.ClusterState) {
+	row, _ := groupTable.GetSelection()
+	// Row 0 is the header; data rows start at 1.
+	idx := row - 1
+	if idx < 0 || idx >= len(groups) {
+		return
+	}
+	group := groups[idx]
+
+	// Active member guard — Kafka rejects deletion of groups with active consumers.
+	if group.Members > 0 {
+		log.Printf("UI: Cannot delete consumer group '%s' — %d active member(s)", group.Name, group.Members)
+		p.showClusterMessage(
+			fmt.Sprintf("[red]Cannot delete group '[white]%s[red]'\n\nGroup has %d active member(s).\nStop all consumers in this group before deleting.\n\n[gray](press any key to dismiss)",
+				group.Name, group.Members),
+			"  ⚠  Active Members  ⚠  ",
+			tcell.ColorRed,
+			state,
+		)
+		return
+	}
+
+	// Confirmation modal.
+	log.Printf("UI: Requesting deletion of consumer group: %s", group.Name)
+	message := fmt.Sprintf(
+		"Delete consumer group\n\n[white::b]%s[-::-]\n\n[gray]State: %s | Lag: %d\n\n[white](Enter) confirm | (Esc) cancel",
+		group.Name, group.State, group.TotalLag,
+	)
+
+	textView := tview.NewTextView().
+		SetText(message).
+		SetTextAlign(tview.AlignCenter).
+		SetDynamicColors(true)
+
+	textView.SetBorder(true).
+		SetTitle("  Delete Consumer Group  ").
+		SetTitleAlign(tview.AlignCenter).
+		SetBorderColor(tcell.ColorRed)
+
+	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyEscape:
+			// Cancel — return to the cluster state view on the groups page.
+			p.renderClusterState(state, 1)
+			return nil
+		case tcell.KeyEnter:
+			// Confirm — perform the delete.
+			p.executeDeleteConsumerGroup(group.Name)
+			return nil
+		}
+		return event
+	})
+
+	// Centre the confirmation box.
+	modal := tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(textView, 10, 0, true).
+			AddItem(nil, 0, 1, false),
+			50, 0, true).
+		AddItem(nil, 0, 1, false)
+
+	p.App.TviewApp.SetRoot(modal, true)
+}
+
+// executeDeleteConsumerGroup performs the async group deletion and refreshes the view.
+func (p *BrokersPanel) executeDeleteConsumerGroup(groupName string) {
+	// Show a brief "deleting..." message.
+	loading := tview.NewTextView().
+		SetText(fmt.Sprintf("\n\n  Deleting consumer group '%s'...", groupName)).
+		SetDynamicColors(true)
+	loading.SetBorder(true).SetTitle("  Cluster State  ").SetTitleAlign(tview.AlignCenter)
+	p.App.TviewApp.SetRoot(loading, true)
+
+	go func() {
+		p.App.ManagerMutex.RLock()
+		mgr := p.App.KafkaManager
+		p.App.ManagerMutex.RUnlock()
+
+		if mgr == nil {
+			p.App.TviewApp.QueueUpdateDraw(func() {
+				p.showClusterError("Not connected to any broker.")
+			})
+			return
+		}
+
+		err := mgr.DeleteConsumerGroup(groupName)
+		if err != nil {
+			log.Printf("UI: Failed to delete consumer group %s: %v", groupName, err)
+			p.App.TviewApp.QueueUpdateDraw(func() {
+				p.showClusterError(fmt.Sprintf("[red]Failed to delete consumer group '[white]%s[red]':\n\n%v\n\n[gray](press Esc to close)", groupName, err))
+			})
+			return
+		}
+
+		log.Printf("UI: Successfully deleted consumer group: %s", groupName)
+		// Refresh the cluster state view on the groups page to reflect the deletion.
+		p.App.TviewApp.QueueUpdateDraw(func() {
+			p.showClusterStateOnPage(1)
+		})
+	}()
+}
+
+// showClusterMessage displays a dismissible message modal that returns to the cluster state view.
+func (p *BrokersPanel) showClusterMessage(message, title string, borderColor tcell.Color, state *kafka.ClusterState) {
+	textView := tview.NewTextView().
+		SetText(message).
+		SetTextAlign(tview.AlignCenter).
+		SetDynamicColors(true)
+
+	textView.SetBorder(true).
+		SetTitle(title).
+		SetTitleAlign(tview.AlignCenter).
+		SetBorderColor(borderColor)
+
+	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		p.renderClusterState(state, 1)
+		return nil
+	})
+
+	modal := tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(textView, 10, 0, true).
+			AddItem(nil, 0, 1, false),
+			60, 0, true).
+		AddItem(nil, 0, 1, false)
+
+	p.App.TviewApp.SetRoot(modal, true)
 }
 

@@ -356,6 +356,14 @@ func (m *Manager) getAdminConfig() *sarama.Config {
 	config := sarama.NewConfig()
 	config.Version = sarama.V2_8_0_0
 	config.Net.DialTimeout = 5 * time.Second
+
+	// Use the same fallback dialer as the main client to avoid DNS timeouts
+	// when contacting advertised listener addresses (e.g. kafka-0).
+	if len(m.Client.Brokers) > 0 {
+		config.Net.Proxy.Enable = true
+		config.Net.Proxy.Dialer = newBootstrapFallbackDialer(m.Client.Brokers[0], config.Net.DialTimeout)
+	}
+
 	return config
 }
 
@@ -417,5 +425,34 @@ func (m *Manager) DeleteTopic(topic string) error {
 	}
 
 	log.Printf("Manager.DeleteTopic: Successfully deleted topic '%s'", topic)
+	return nil
+}
+
+func (m *Manager) DeleteConsumerGroup(group string) error {
+	log.Printf("Manager.DeleteConsumerGroup: Starting deletion of group '%s'", group)
+
+	// Use a separate admin client to avoid closing the shared client
+	log.Printf("Manager.DeleteConsumerGroup: Creating new ClusterAdmin connection to brokers: %v", m.Client.Brokers)
+	admin, err := sarama.NewClusterAdmin(m.Client.Brokers, m.getAdminConfig())
+	if err != nil {
+		log.Printf("Manager.DeleteConsumerGroup: ERROR - Failed to create ClusterAdmin: %v", err)
+		return err
+	}
+	defer func() {
+		log.Println("Manager.DeleteConsumerGroup: Closing ClusterAdmin")
+		if err := admin.Close(); err != nil {
+			log.Printf("Manager.DeleteConsumerGroup: Warning - Failed to close ClusterAdmin: %v", err)
+		}
+	}()
+
+	log.Printf("Manager.DeleteConsumerGroup: Sending DeleteConsumerGroup request for '%s'", group)
+	err = admin.DeleteConsumerGroup(group)
+
+	if err != nil {
+		log.Printf("Manager.DeleteConsumerGroup: ERROR - Failed to delete consumer group: %v", err)
+		return err
+	}
+
+	log.Printf("Manager.DeleteConsumerGroup: Successfully deleted consumer group '%s'", group)
 	return nil
 }
