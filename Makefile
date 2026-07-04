@@ -1,4 +1,4 @@
-.PHONY: build run test test-integration kafka-up kafka-down demo-up demo-down demo-infra-cleanup clean publish
+.PHONY: build run test test-integration kafka-up kafka-down demo-up demo-down demo-infra-cleanup clean publish publish-ghcr
 
 # Build the application
 build:
@@ -65,3 +65,10 @@ publish:
 	echo "Publishing version: $$VERSION"; \
 	git tag $$VERSION && git push origin $$VERSION
 
+# Build and publish docker image to GHCR
+publish-ghcr:
+	@VERSION=$$(cat current-version | tr -d '[:space:]'); \
+	echo "Building and pushing Docker image to GHCR for version: $$VERSION"; \
+	docker build -t ghcr.io/dubel/lazykafka:$$VERSION -t ghcr.io/dubel/lazykafka:latest . && \
+	docker push ghcr.io/dubel/lazykafka:$$VERSION && \
+	docker push ghcr.io/dubel/lazykafka:latest
