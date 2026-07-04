@@ -24,9 +24,10 @@
 **tl;dr**
 
  - connect to broker (connection params persisted)
+     - inspect broker state: topic offsets, consumer groups (removal possible) and cluster config
  - list, add and remove topics
  - read from topics (with an option to start from beginning)
- - publish to topics
+ - publish to topics (including publishing content from file with convinient file browser embedded into lazykafka)
 
 **disclaimer**
 
