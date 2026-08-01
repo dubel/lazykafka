@@ -196,59 +196,92 @@ func (m *Manager) GetClusterState() (*ClusterState, error) {
 		TotalTopics:  len(topics),
 	}
 
+	newestOffsetsMap := make(map[string]map[int32]int64)
+	var wg sync.WaitGroup
+	var stateMu sync.Mutex
+
 	for _, topic := range topics {
-		partitions, err := m.Client.GetPartitions(topic)
-		if err != nil {
-			continue
-		}
-		state.TotalPartitions += len(partitions)
+		wg.Add(1)
+		go func(t string) {
+			defer wg.Done()
 
-		ti := TopicOffsetInfo{
-			Name:       topic,
-			Partitions: len(partitions),
-		}
-		firstPartition := true
-
-		for _, p := range partitions {
-			leader, err := m.Client.Leader(topic, p)
-			replicas, _ := m.Client.Replicas(topic, p)
-			isr, _ := m.Client.InSyncReplicas(topic, p)
-
-			if err == nil && leader != nil {
-				if bi, ok := brokerMap[leader.ID()]; ok {
-					bi.LeaderCount++
-				}
-			} else {
-				state.OfflinePartitionCount++
+			partitions, err := m.Client.GetPartitions(t)
+			if err != nil {
+				return
 			}
 
-			for _, r := range replicas {
-				if bi, ok := brokerMap[r]; ok {
-					bi.ReplicaCount++
+			stateMu.Lock()
+			state.TotalPartitions += len(partitions)
+			stateMu.Unlock()
+
+			ti := TopicOffsetInfo{
+				Name:       t,
+				Partitions: len(partitions),
+			}
+			firstPartition := true
+
+			localOffline := 0
+			localUnderReplicated := 0
+			localLeaderCounts := make(map[int32]int)
+			localReplicaCounts := make(map[int32]int)
+			localNewestOffsets := make(map[int32]int64)
+
+			for _, p := range partitions {
+				leader, err := m.Client.Leader(t, p)
+				replicas, _ := m.Client.Replicas(t, p)
+				isr, _ := m.Client.InSyncReplicas(t, p)
+
+				if err == nil && leader != nil {
+					localLeaderCounts[leader.ID()]++
+				} else {
+					localOffline++
+				}
+
+				for _, r := range replicas {
+					localReplicaCounts[r]++
+				}
+
+				if len(isr) < len(replicas) {
+					localUnderReplicated++
+				}
+
+				// Collect offset info for topic offsets section
+				newest, errN := m.Client.GetOffset(t, p, sarama.OffsetNewest)
+				oldest, errO := m.Client.GetOffset(t, p, sarama.OffsetOldest)
+				if errN == nil && errO == nil {
+					localNewestOffsets[p] = newest
+					ti.TotalMessages += newest - oldest
+					if newest > ti.NewestOffset {
+						ti.NewestOffset = newest
+					}
+					if firstPartition || oldest < ti.OldestOffset {
+						ti.OldestOffset = oldest
+						firstPartition = false
+					}
 				}
 			}
 
-			if len(isr) < len(replicas) {
-				state.UnderReplicatedCount++
-			}
-
-			// Collect offset info for topic offsets section
-			newest, errN := m.Client.GetOffset(topic, p, sarama.OffsetNewest)
-			oldest, errO := m.Client.GetOffset(topic, p, sarama.OffsetOldest)
-			if errN == nil && errO == nil {
-				ti.TotalMessages += newest - oldest
-				if newest > ti.NewestOffset {
-					ti.NewestOffset = newest
-				}
-				if firstPartition || oldest < ti.OldestOffset {
-					ti.OldestOffset = oldest
-					firstPartition = false
+			stateMu.Lock()
+			state.OfflinePartitionCount += localOffline
+			state.UnderReplicatedCount += localUnderReplicated
+			for id, count := range localLeaderCounts {
+				if bi, ok := brokerMap[id]; ok {
+					bi.LeaderCount += count
 				}
 			}
-		}
+			for id, count := range localReplicaCounts {
+				if bi, ok := brokerMap[id]; ok {
+					bi.ReplicaCount += count
+				}
+			}
+			state.TopicOffsets = append(state.TopicOffsets, ti)
+			newestOffsetsMap[t] = localNewestOffsets
+			stateMu.Unlock()
 
-		state.TopicOffsets = append(state.TopicOffsets, ti)
+		}(topic)
 	}
+
+	wg.Wait()
 
 	for _, bi := range brokerMap {
 		state.Brokers = append(state.Brokers, *bi)
@@ -312,40 +345,65 @@ func (m *Manager) GetClusterState() (*ClusterState, error) {
 		return state, nil
 	}
 
+	var cgWg sync.WaitGroup
+	var cgMu sync.Mutex
+
 	for _, gd := range groupDescs {
-		gi := ConsumerGroupInfo{
-			Name:      gd.GroupId,
-			State:     gd.State,
-			Members:   len(gd.Members),
-			TopicLags: make(map[string]int64),
-		}
-
-		offsets, err := admin.ListConsumerGroupOffsets(gd.GroupId, nil)
-		if err != nil {
-			state.ConsumerGroups = append(state.ConsumerGroups, gi)
-			continue
-		}
-
-		for topic, partitionOffsets := range offsets.Blocks {
-			for partition, block := range partitionOffsets {
-				if block.Offset < 0 {
-					continue
-				}
-				newest, err := m.Client.GetOffset(topic, partition, sarama.OffsetNewest)
-				if err != nil {
-					continue
-				}
-				lag := newest - block.Offset
-				if lag < 0 {
-					lag = 0
-				}
-				gi.TopicLags[topic] += lag
-				gi.TotalLag += lag
+		cgWg.Add(1)
+		go func(gDesc *sarama.GroupDescription) {
+			defer cgWg.Done()
+			gi := ConsumerGroupInfo{
+				Name:      gDesc.GroupId,
+				State:     gDesc.State,
+				Members:   len(gDesc.Members),
+				TopicLags: make(map[string]int64),
 			}
-		}
 
-		state.ConsumerGroups = append(state.ConsumerGroups, gi)
+			offsets, err := admin.ListConsumerGroupOffsets(gDesc.GroupId, nil)
+			if err != nil {
+				cgMu.Lock()
+				state.ConsumerGroups = append(state.ConsumerGroups, gi)
+				cgMu.Unlock()
+				return
+			}
+
+			for topic, partitionOffsets := range offsets.Blocks {
+				for partition, block := range partitionOffsets {
+					if block.Offset < 0 {
+						continue
+					}
+
+					var newest int64
+					// Reuse the newest offset we already fetched concurrently
+					if tmap, ok := newestOffsetsMap[topic]; ok {
+						if n, ok := tmap[partition]; ok {
+							newest = n
+						}
+					}
+
+					if newest == 0 {
+						n, err := m.Client.GetOffset(topic, partition, sarama.OffsetNewest)
+						if err == nil {
+							newest = n
+						}
+					}
+
+					lag := newest - block.Offset
+					if lag < 0 {
+						lag = 0
+					}
+					gi.TopicLags[topic] += lag
+					gi.TotalLag += lag
+				}
+			}
+
+			cgMu.Lock()
+			state.ConsumerGroups = append(state.ConsumerGroups, gi)
+			cgMu.Unlock()
+		}(gd)
 	}
+
+	cgWg.Wait()
 
 	log.Printf("Manager.GetClusterState: done – %d brokers, %d topics, %d groups",
 		len(state.Brokers), state.TotalTopics, len(state.ConsumerGroups))

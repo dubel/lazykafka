@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"net"
+	"sync"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -12,14 +13,12 @@ import (
 // metadata (e.g. "kafka-0:9092") but cannot be resolved by DNS, the dialer
 // transparently substitutes the host portion of the original bootstrap address
 // so that the same reachable IP is used instead.
-//
-// This is the standard symptom in Kubernetes when the Kafka broker advertises
-// its pod hostname (kafka-0) and the consumer pod cannot resolve that hostname,
-// even though it can reach the broker via its ClusterIP or service DNS.  No
-// Kafka configuration change is required.
 type bootstrapFallbackDialer struct {
 	bootstrapHost string        // host part of the address the user actually typed
 	timeout       time.Duration
+	cacheMutex    sync.RWMutex
+	lookupCache   map[string]bool
+	lookupFunc    func(string) ([]string, error) // injectable for testing; defaults to net.LookupHost
 }
 
 // newBootstrapFallbackDialer resolves the host part of bootstrapAddr once so
@@ -37,7 +36,12 @@ func newBootstrapFallbackDialer(bootstrapAddr string, timeout time.Duration) *bo
 			host = addrs[0]
 		}
 	}
-	return &bootstrapFallbackDialer{bootstrapHost: host, timeout: timeout}
+	return &bootstrapFallbackDialer{
+		bootstrapHost: host,
+		timeout:       timeout,
+		lookupCache:   make(map[string]bool),
+		lookupFunc:    net.LookupHost,
+	}
 }
 
 // Dial satisfies the proxy.Dialer interface used by sarama.Config.Net.Proxy.Dialer.
@@ -52,7 +56,19 @@ func (d *bootstrapFallbackDialer) Dial(network, addr string) (net.Conn, error) {
 	// We still keep the original port so that multi-broker clusters where
 	// each broker uses the same IP but different ports work correctly.
 	if net.ParseIP(host) == nil {
-		if _, lookupErr := net.LookupHost(host); lookupErr != nil {
+		d.cacheMutex.RLock()
+		resolvable, cached := d.lookupCache[host]
+		d.cacheMutex.RUnlock()
+
+		if !cached {
+			_, lookupErr := d.lookupFunc(host)
+			resolvable = (lookupErr == nil)
+			d.cacheMutex.Lock()
+			d.lookupCache[host] = resolvable
+			d.cacheMutex.Unlock()
+		}
+
+		if !resolvable {
 			addr = net.JoinHostPort(d.bootstrapHost, port)
 		}
 	}

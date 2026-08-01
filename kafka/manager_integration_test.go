@@ -246,3 +246,88 @@ func TestManager_CreateAndDeleteTopic(t *testing.T) {
 	}
 	t.Logf("Deleted topic: %s", topic)
 }
+
+// TestManager_GetClusterState_Consistency calls GetClusterState multiple times
+// and verifies that the concurrent goroutine-based aggregation produces
+// deterministic, consistent results (same broker/topic/partition counts).
+func TestManager_GetClusterState_Consistency(t *testing.T) {
+	skipIfNoKafka(t)
+
+	manager, err := kafka.NewManager([]string{getTestBroker()})
+	if err != nil {
+		t.Fatalf("Failed to create manager: %v", err)
+	}
+	defer manager.Close()
+
+	const iterations = 3
+	type snapshot struct {
+		brokers    int
+		topics     int
+		partitions int
+		offsets    int
+	}
+
+	var snapshots [iterations]snapshot
+	for i := 0; i < iterations; i++ {
+		state, err := manager.GetClusterState()
+		if err != nil {
+			t.Fatalf("GetClusterState call %d failed: %v", i, err)
+		}
+		snapshots[i] = snapshot{
+			brokers:    len(state.Brokers),
+			topics:     state.TotalTopics,
+			partitions: state.TotalPartitions,
+			offsets:    len(state.TopicOffsets),
+		}
+	}
+
+	// All calls should agree on every counter.
+	for i := 1; i < iterations; i++ {
+		if snapshots[i] != snapshots[0] {
+			t.Errorf("inconsistency between call 0 and call %d:\n  call 0: %+v\n  call %d: %+v",
+				i, snapshots[0], i, snapshots[i])
+		}
+	}
+
+	// TopicOffsets slice length must equal TotalTopics (one entry per topic).
+	if snapshots[0].offsets != snapshots[0].topics {
+		t.Errorf("TopicOffsets count (%d) != TotalTopics (%d) — concurrent aggregation may be losing entries",
+			snapshots[0].offsets, snapshots[0].topics)
+	}
+
+	t.Logf("GetClusterState consistent across %d calls: %d brokers, %d topics, %d partitions",
+		iterations, snapshots[0].brokers, snapshots[0].topics, snapshots[0].partitions)
+}
+
+// TestManager_GetClusterState_Performance verifies that GetClusterState
+// completes within a reasonable time bound.  A regression from concurrent
+// to sequential execution would cause this to exceed the deadline on any
+// cluster with more than a handful of topics.
+func TestManager_GetClusterState_Performance(t *testing.T) {
+	skipIfNoKafka(t)
+
+	manager, err := kafka.NewManager([]string{getTestBroker()})
+	if err != nil {
+		t.Fatalf("Failed to create manager: %v", err)
+	}
+	defer manager.Close()
+
+	start := time.Now()
+	state, err := manager.GetClusterState()
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("GetClusterState failed: %v", err)
+	}
+
+	t.Logf("GetClusterState completed in %v (%d topics, %d partitions, %d consumer groups)",
+		elapsed, state.TotalTopics, state.TotalPartitions, len(state.ConsumerGroups))
+
+	// 5 seconds is generous; on a local single-broker cluster this should
+	// finish in well under 1 second.  The bound exists to catch regressions
+	// back to sequential behaviour (which on Alpine caused 30 s+ delays).
+	const deadline = 5 * time.Second
+	if elapsed > deadline {
+		t.Errorf("GetClusterState took %v, expected < %v (possible sequential regression)", elapsed, deadline)
+	}
+}
