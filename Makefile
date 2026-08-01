@@ -1,4 +1,4 @@
-.PHONY: build run test test-integration kafka-up kafka-down demo-up demo-down demo-infra-cleanup clean publish publish-ghcr
+.PHONY: build run test test-integration kafka-up kafka-down demo-up demo-down demo-infra-cleanup clean publish publish-ghcr release
 
 # Build the application
 build:
@@ -72,3 +72,6 @@ publish-ghcr:
 	docker build -t ghcr.io/dubel/lazykafka:$$VERSION -t ghcr.io/dubel/lazykafka:latest . && \
 	docker push ghcr.io/dubel/lazykafka:$$VERSION && \
 	docker push ghcr.io/dubel/lazykafka:latest
+
+# Full release: tag + push git tag (triggers CI binaries) + build & push Docker image to GHCR
+release: publish publish-ghcr
