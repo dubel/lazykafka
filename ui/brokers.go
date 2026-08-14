@@ -28,14 +28,14 @@ func NewBrokersPanel(app *App) *BrokersPanel {
 
 	flex.SetBorder(true).
 		SetTitle("Brokers (F1)").
-		SetBorderColor(tview.Styles.BorderColor).
+		SetBorderColor(tcell.ColorWhite).
 		SetBorderAttributes(tcell.AttrNone)
 
 	flex.SetFocusFunc(func() {
 		flex.SetBorderColor(tcell.ColorGreen)
 	})
 	flex.SetBlurFunc(func() {
-		flex.SetBorderColor(tview.Styles.BorderColor)
+		flex.SetBorderColor(tcell.ColorWhite)
 	})
 
 	p := &BrokersPanel{
@@ -62,7 +62,7 @@ func NewBrokersPanel(app *App) *BrokersPanel {
 	})
 	// Restore green highlight when panel loses focus — hover is gone so the tag must carry the colour (green).
 	p.ListView.SetBlurFunc(func() {
-		flex.SetBorderColor(tview.Styles.BorderColor)
+		flex.SetBorderColor(tcell.ColorWhite)
 		ci := p.connectedBrokerIndex()
 		if ci >= 0 {
 			dt := p.connectedDisplayText(ci)

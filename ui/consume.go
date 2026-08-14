@@ -49,13 +49,13 @@ func NewConsumePanel(app *App) *ConsumePanel {
 
 	flex.SetBorder(true).
 		SetTitle("Consume (F3)").
-		SetBorderColor(tview.Styles.BorderColor)
+		SetBorderColor(tcell.ColorWhite)
 
 	flex.SetFocusFunc(func() {
 		flex.SetBorderColor(tcell.ColorGreen)
 	})
 	flex.SetBlurFunc(func() {
-		flex.SetBorderColor(tview.Styles.BorderColor)
+		flex.SetBorderColor(tcell.ColorWhite)
 	})
 
 	p := &ConsumePanel{
@@ -70,7 +70,7 @@ func NewConsumePanel(app *App) *ConsumePanel {
 		flex.SetBorderColor(tcell.ColorGreen)
 	})
 	p.TextView.SetBlurFunc(func() {
-		flex.SetBorderColor(tview.Styles.BorderColor)
+		flex.SetBorderColor(tcell.ColorWhite)
 	})
 
 	p.TextView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {

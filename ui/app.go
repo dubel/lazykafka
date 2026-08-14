@@ -33,20 +33,6 @@ type App struct {
 }
 
 func NewApp(version string) *App {
-	// Adapt tview to the native terminal theme using standard 16 ANSI colors
-	// This preserves UI structure (borders/modals) while letting the terminal theme (like Dracula/Synthwave) paint the actual hex colors.
-	tview.Styles.PrimitiveBackgroundColor = tcell.ColorDefault
-	tview.Styles.ContrastBackgroundColor = tcell.ColorGray       // ANSI 8 (Bright Black / Dark Gray)
-	tview.Styles.MoreContrastBackgroundColor = tcell.ColorSilver // ANSI 7 (White / Light Gray)
-	tview.Styles.BorderColor = tcell.ColorGray                   // ANSI 8 (Subtle borders)
-	tview.Styles.TitleColor = tcell.ColorAqua                    // ANSI 14 (Bright Cyan)
-	tview.Styles.GraphicsColor = tcell.ColorGray                 // ANSI 8
-	tview.Styles.PrimaryTextColor = tcell.ColorDefault           // Native terminal text color
-	tview.Styles.SecondaryTextColor = tcell.ColorYellow          // ANSI 11 (Bright Yellow)
-	tview.Styles.TertiaryTextColor = tcell.ColorLime             // ANSI 10 (Bright Green)
-	tview.Styles.InverseTextColor = tcell.ColorBlack             // ANSI 0 (Black)
-	tview.Styles.ContrastSecondaryTextColor = tcell.ColorBlack   // ANSI 0 (Black)
-
 	cfg, err := config.LoadConfig()
 	if err != nil || cfg == nil {
 		cfg = &config.Config{Brokers: []config.Broker{}}
