@@ -47,13 +47,13 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 
 	flex.SetBorder(true).
 		SetTitle("Topics (F2)").
-		SetBorderColor(tcell.ColorWhite)
+		SetBorderColor(tview.Styles.BorderColor)
 
 	flex.SetFocusFunc(func() {
 		flex.SetBorderColor(tcell.ColorGreen)
 	})
 	flex.SetBlurFunc(func() {
-		flex.SetBorderColor(tcell.ColorWhite)
+		flex.SetBorderColor(tview.Styles.BorderColor)
 	})
 
 	// listView blur handled below after p is created (needs p in scope)
@@ -70,7 +70,7 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 
 	// Restore green highlight when panel loses focus — hover is gone so the tag must carry the colour (green).
 	p.ListView.SetBlurFunc(func() {
-		flex.SetBorderColor(tcell.ColorWhite)
+		flex.SetBorderColor(tview.Styles.BorderColor)
 		if p.SelectedIndex >= 0 && p.SelectedIndex < len(p.Topics) {
 			p.ListView.SetItemText(p.SelectedIndex,
 				"[white:green]"+p.Topics[p.SelectedIndex]+" >> selected <<[-:-:-]", "")

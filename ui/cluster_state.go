@@ -160,7 +160,7 @@ func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState, initialPage
 	})
 
 	for r, ti := range state.TopicOffsets {
-		msgColor := tcell.ColorWhite
+		msgColor := tcell.ColorDefault
 		if ti.TotalMessages > 0 {
 			msgColor = tcell.ColorGreen
 		}
@@ -198,7 +198,7 @@ func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState, initialPage
 	})
 
 	for r, g := range state.ConsumerGroups {
-		stateColor := tcell.ColorWhite
+		stateColor := tcell.ColorDefault
 		switch g.State {
 		case "Stable":
 			stateColor = tcell.ColorGreen
@@ -210,7 +210,7 @@ func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState, initialPage
 			stateColor = tcell.ColorOrange
 		}
 
-		lagColor := tcell.ColorWhite
+		lagColor := tcell.ColorDefault
 		if g.TotalLag > 10000 {
 			lagColor = tcell.ColorRed
 		} else if g.TotalLag > 1000 {
@@ -269,7 +269,7 @@ func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState, initialPage
 		_ = source // we use sourceColor on the cell directly
 
 		configTable.SetCell(r+1, 0, tview.NewTableCell(ce.Key))
-		configTable.SetCell(r+1, 1, tview.NewTableCell(ce.Value).SetTextColor(tcell.ColorWhite))
+		configTable.SetCell(r+1, 1, tview.NewTableCell(ce.Value).SetTextColor(tcell.ColorDefault))
 		configTable.SetCell(r+1, 2, tview.NewTableCell(func() string {
 			if ce.IsDefault {
 				return "default"

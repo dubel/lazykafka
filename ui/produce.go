@@ -35,13 +35,13 @@ func NewProducePanel(app *App) *ProducePanel {
 
 	flex.SetBorder(true).
 		SetTitle("Produce (F4)").
-		SetBorderColor(tcell.ColorWhite)
+		SetBorderColor(tview.Styles.BorderColor)
 
 	flex.SetFocusFunc(func() {
 		flex.SetBorderColor(tcell.ColorGreen)
 	})
 	flex.SetBlurFunc(func() {
-		flex.SetBorderColor(tcell.ColorWhite)
+		flex.SetBorderColor(tview.Styles.BorderColor)
 	})
 
 	// Set focus handlers on the TextArea to update the Flex border
@@ -49,7 +49,7 @@ func NewProducePanel(app *App) *ProducePanel {
 		flex.SetBorderColor(tcell.ColorGreen)
 	})
 	textArea.SetBlurFunc(func() {
-		flex.SetBorderColor(tcell.ColorWhite)
+		flex.SetBorderColor(tview.Styles.BorderColor)
 	})
 
 	p := &ProducePanel{
