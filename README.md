@@ -33,6 +33,42 @@
 
 Lazykafka is designed for quick observability, not heavy lifting. We intentionally skip consumer groups and offset tracking, so you can peek into your streams without joining a group or "stealing" messages from your actual consumers. It's a transparent window into your cluster that leaves no footprints
 
+# Features Demo
+
+Here is a showcase of the main features in LazyKafka.
+
+## Connecting and Managing Brokers
+Easily connect to your cluster from the start. You can also add new brokers seamlessly – and all your configurations are automatically persisted across your sessions!
+
+![Add Broker Demo](./06_add_broker.gif)
+
+## Navigating and Managing Topics
+Easily scroll through topics, use `/` to filter them dynamically, and instantly add or remove topics using the modal.
+
+![Topics Demo](./01_topics.gif)
+
+## Live Consumption & Clipboard Integration
+Select a topic and watch messages stream in live. Hit `c` to instantly copy the last consumed message directly to your system clipboard for easy sharing or analysis!
+
+![Consume Demo](./02_consume.gif)
+![Copy Message Demo](./07_copy_message.gif)
+
+## Producing Messages
+Quickly produce JSON messages directly to your selected topic. You can type data inline in the editor, or use the built-in file picker (`Ctrl+P`) to load larger payloads from disk!
+
+![Inline Produce Demo](./03_inline_produce.gif)
+![Produce File Demo](./03_produce_file.gif)
+
+## Broker & Cluster Details
+Inspect broker configurations, verify consumer groups (and quickly delete idle ones with `r`), and view offsets by opening the cluster state panel (`d`). Note how you can effortlessly carousel through the sub-panes.
+
+![Broker Details Demo](./04_broker_details.gif)
+
+## Internal Logs
+Press `F5` anytime to see application logs and check connection status and internal events.
+
+![Logs Demo](./05_logs.gif)
+
 # Installation
 **Homebrew (macOS/Linux**)
 
