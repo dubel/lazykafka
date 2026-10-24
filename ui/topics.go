@@ -138,7 +138,6 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 		return event
 	})
 
-
 	// Swallow the '/' rune that leaks into the search input when focus
 	// switches mid-event-dispatch, then force-clear the field.
 	searchInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -168,7 +167,6 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 			p.App.TviewApp.SetFocus(p.ListView)
 		}
 	})
-
 
 	// Background refresh — only poll when connected.
 	go func() {

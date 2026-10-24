@@ -2,10 +2,10 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
-	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -31,11 +31,11 @@ type App struct {
 	// lock-free from any goroutine, including the UI goroutine; a closed
 	// manager just returns kafka.ErrManagerClosed, so no lock is held across
 	// network calls.
-	manager            atomic.Pointer[kafka.Manager]
-	InModal            bool
-	Version            string
-	healthMu           sync.Mutex // guards healthCheckCancel; connect runs off the UI goroutine
-	healthCheckCancel  context.CancelFunc
+	manager           atomic.Pointer[kafka.Manager]
+	InModal           bool
+	Version           string
+	healthMu          sync.Mutex // guards healthCheckCancel; connect runs off the UI goroutine
+	healthCheckCancel context.CancelFunc
 }
 
 // healthCheckFailuresBeforeDisconnect avoids tearing down the session on a
@@ -117,15 +117,14 @@ func (a *App) setupNavigation() {
 		if event.Key() == tcell.KeyTab {
 			focus := a.TviewApp.GetFocus()
 			// Check if focus is on any component within the panels
-			if focus == a.BrokersPanel.View || focus == a.BrokersPanel.ListView {
+			switch focus {
+			case a.BrokersPanel.View, a.BrokersPanel.ListView:
 				a.TviewApp.SetFocus(a.TopicsPanel.View)
-			} else if focus == a.TopicsPanel.View || focus == a.TopicsPanel.ListView {
+			case a.TopicsPanel.View, a.TopicsPanel.ListView:
 				a.TviewApp.SetFocus(a.ConsumePanel.View)
-			} else if focus == a.ConsumePanel.View || focus == a.ConsumePanel.TextView {
+			case a.ConsumePanel.View, a.ConsumePanel.TextView:
 				a.TviewApp.SetFocus(a.ProducePanel.View)
-			} else if focus == a.ProducePanel.View || focus == a.ProducePanel.TextArea {
-				a.TviewApp.SetFocus(a.BrokersPanel.View)
-			} else {
+			default:
 				a.TviewApp.SetFocus(a.BrokersPanel.View)
 			}
 			return nil
@@ -425,4 +424,3 @@ func (a *App) showConnectionLostModal(brokerAddress string) {
 	a.InModal = true
 	a.TviewApp.SetRoot(modal, true)
 }
-

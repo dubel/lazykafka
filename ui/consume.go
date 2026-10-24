@@ -418,4 +418,3 @@ func tryOSC52(text string) error {
 	_, err = fmt.Fprintf(tty, "\033]52;c;%s\033\\", encoded)
 	return err
 }
-

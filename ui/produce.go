@@ -144,5 +144,3 @@ func (p *ProducePanel) SetTopic(topic string) {
 		flex.SetTitle("Produce (F4) - " + topic)
 	}
 }
-
-

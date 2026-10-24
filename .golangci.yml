@@ -1,0 +1,16 @@
+version: "2"
+
+run:
+  # Lint integration tests too.
+  build-tags:
+    - integration
+
+linters:
+  exclusions:
+    # Unchecked Close/Remove/Setenv/Fprint* errors are idiomatic in defers and UI writes.
+    presets:
+      - std-error-handling
+
+formatters:
+  enable:
+    - gofmt

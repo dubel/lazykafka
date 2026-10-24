@@ -133,6 +133,7 @@ func TestManager_ConsumeMultiplePartitions(t *testing.T) {
 	messageCount := 0
 	timeout := time.After(5 * time.Second)
 
+collect:
 	for messageCount < 5 {
 		select {
 		case msg := <-messages:
@@ -146,7 +147,7 @@ func TestManager_ConsumeMultiplePartitions(t *testing.T) {
 		case err := <-errors:
 			t.Logf("Consumer error (may be ok): %v", err)
 		case <-timeout:
-			break
+			break collect
 		}
 	}
 
@@ -357,7 +358,7 @@ func TestManager_GetClusterState_WhileConsuming(t *testing.T) {
 		for {
 			select {
 			case <-messages:
-			case <-errors:
+			case <-errors: //nolint:errcheck // only draining the channel
 			case <-ctx.Done():
 				return
 			}

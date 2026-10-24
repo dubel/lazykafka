@@ -10,7 +10,8 @@ Dodatkowo uruchomiłem aplikację na lokalnym brokerze Kafka 4.0.0 (KRaft) z dan
 #24 i #25 naprawione: `go mod tidy`, `.idea/` poza gitem, `--version` z commitem i datą, obraz Dockera budowany w CI
 przez goreleasera (multi-arch, `alpine:3.24`, użytkownik nie-root).
 #26 częściowo: oba README zaktualizowane, release notes w `docs/release-notes/`, `KAFKA_BIN` w `demo/*.sh` konfigurowalny.
-Otwarte: auto-reconnect z #11, README w src (#26), P2 oraz #21–#23.
+#23 częściowo: `ci.yml` (golangci-lint z gofmt, `go mod tidy -diff`, vet, `go test -race`, integracja z Kafką z `docker-compose.yml`).
+Otwarte: auto-reconnect z #11, README w src (#26), P2, #21, #22 oraz z #23 testy jednostkowe UI, `goleak` i macierz wersji brokera.
 
 Priorytety: **P0** to błąd widoczny dla użytkownika lub ryzyko utraty danych, **P1** to poprawność i współbieżność,
 **P2** to luki funkcjonalne, **P3** to porządki i utrzymanie.

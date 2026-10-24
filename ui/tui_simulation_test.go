@@ -48,7 +48,9 @@ func TestSimulationScreen_BasicSetup(t *testing.T) {
 	// Run the app in a goroutine (it would normally block)
 	go func() {
 		defer wg.Done()
-		app.Run()
+		if err := app.Run(); err != nil {
+			t.Errorf("app.Run: %v", err)
+		}
 	}()
 
 	// Give it a moment to render
@@ -108,7 +110,9 @@ func TestSimulationScreen_KeyboardNavigation(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		app.Run()
+		if err := app.Run(); err != nil {
+			t.Errorf("app.Run: %v", err)
+		}
 	}()
 
 	// Wait for initial render
@@ -164,7 +168,9 @@ func TestSimulationScreen_TextInput(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		app.Run()
+		if err := app.Run(); err != nil {
+			t.Errorf("app.Run: %v", err)
+		}
 	}()
 
 	// Wait for render
@@ -243,7 +249,9 @@ func TestSimulationScreen_FunctionKeys(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		app.Run()
+		if err := app.Run(); err != nil {
+			t.Errorf("app.Run: %v", err)
+		}
 	}()
 
 	time.Sleep(100 * time.Millisecond)
@@ -307,7 +315,9 @@ func TestSimulationScreen_ModalDialog(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		app.Run()
+		if err := app.Run(); err != nil {
+			t.Errorf("app.Run: %v", err)
+		}
 	}()
 
 	time.Sleep(100 * time.Millisecond)

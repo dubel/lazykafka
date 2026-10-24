@@ -16,7 +16,7 @@ test:
 test-integration: kafka-up
 	@echo "Waiting for Kafka to be ready..."
 	@sleep 5
-	go test -tags=integration -v ./kafka/...
+	go test -tags=integration -v ./...
 
 # Start Kafka in Docker
 kafka-up:

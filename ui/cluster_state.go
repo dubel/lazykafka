@@ -543,4 +543,3 @@ func (p *BrokersPanel) showClusterMessage(message, title string, borderColor tce
 
 	p.App.TviewApp.SetRoot(modal, true)
 }
-

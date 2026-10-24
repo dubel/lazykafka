@@ -2,6 +2,7 @@ package ui
 
 import (
 	_ "embed"
+	"log"
 	"strings"
 
 	"github.com/dubel/lazykafka/config"
@@ -46,7 +47,9 @@ func NewSplashPanel(app *App, settings *config.Settings) *SplashPanel {
 	form := tview.NewForm().
 		AddCheckbox("Show this window on startup", settings.ShowSplashOnStartup, func(checked bool) {
 			settings.ShowSplashOnStartup = checked
-			config.SaveSettings(settings)
+			if err := config.SaveSettings(settings); err != nil {
+				log.Printf("Splash: failed to save settings: %v", err)
+			}
 		}).
 		AddButton("Continue", func() {
 			s.dismiss()

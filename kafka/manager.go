@@ -47,11 +47,11 @@ type ConsumerGroupInfo struct {
 
 // TopicOffsetInfo holds per-topic offset summary.
 type TopicOffsetInfo struct {
-	Name           string
-	Partitions     int
-	TotalMessages  int64 // sum of (newest - oldest) across partitions
-	NewestOffset   int64 // max newest offset across partitions
-	OldestOffset   int64 // min oldest offset across partitions
+	Name          string
+	Partitions    int
+	TotalMessages int64 // sum of (newest - oldest) across partitions
+	NewestOffset  int64 // max newest offset across partitions
+	OldestOffset  int64 // min oldest offset across partitions
 }
 
 // ClusterState is the full snapshot returned to the UI.
@@ -399,21 +399,21 @@ func (m *Manager) GetClusterState() (*ClusterState, error) {
 		}
 		// Key configs that are operationally useful
 		interestingKeys := map[string]bool{
-			"log.retention.hours":          true,
-			"log.retention.ms":             true,
-			"log.retention.bytes":          true,
-			"message.max.bytes":            true,
-			"replica.fetch.max.bytes":      true,
-			"num.partitions":               true,
-			"default.replication.factor":   true,
-			"auto.create.topics.enable":    true,
-			"min.insync.replicas":          true,
-			"log.segment.bytes":            true,
-			"log.cleanup.policy":           true,
-			"compression.type":             true,
+			"log.retention.hours":            true,
+			"log.retention.ms":               true,
+			"log.retention.bytes":            true,
+			"message.max.bytes":              true,
+			"replica.fetch.max.bytes":        true,
+			"num.partitions":                 true,
+			"default.replication.factor":     true,
+			"auto.create.topics.enable":      true,
+			"min.insync.replicas":            true,
+			"log.segment.bytes":              true,
+			"log.cleanup.policy":             true,
+			"compression.type":               true,
 			"unclean.leader.election.enable": true,
-			"max.message.bytes":            true,
-			"offsets.retention.minutes":    true,
+			"max.message.bytes":              true,
+			"offsets.retention.minutes":      true,
 		}
 		configs, err := admin.DescribeConfig(resource)
 		if err != nil {

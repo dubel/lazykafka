@@ -73,11 +73,15 @@ func TestSetupLogging_MovesOldLogs(t *testing.T) {
 	defer cleanup()
 
 	logDir := filepath.Join(tmpDir, ".lazykafka")
-	os.MkdirAll(logDir, 0755)
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create a stale log file from a previous day
 	staleFile := filepath.Join(logDir, "lazykafka-01-01-2025.log")
-	os.WriteFile(staleFile, []byte("old log data"), 0644)
+	if err := os.WriteFile(staleFile, []byte("old log data"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Run setup for today
 	fixedTime := time.Date(2026, 2, 13, 10, 30, 0, 0, time.UTC)
@@ -103,11 +107,15 @@ func TestSetupLogging_KeepsTodayLog(t *testing.T) {
 	defer cleanup()
 
 	logDir := filepath.Join(tmpDir, ".lazykafka")
-	os.MkdirAll(logDir, 0755)
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create today's log file with some existing content
 	todayFile := filepath.Join(logDir, "lazykafka-13-02-2026.log")
-	os.WriteFile(todayFile, []byte("existing log data\n"), 0644)
+	if err := os.WriteFile(todayFile, []byte("existing log data\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	fixedTime := time.Date(2026, 2, 13, 10, 30, 0, 0, time.UTC)
 	f, err := SetupLoggingForTime(fixedTime)

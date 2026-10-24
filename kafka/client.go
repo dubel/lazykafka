@@ -14,7 +14,7 @@ import (
 // transparently substitutes the host portion of the original bootstrap address
 // so that the same reachable IP is used instead.
 type bootstrapFallbackDialer struct {
-	bootstrapHost string        // host part of the address the user actually typed
+	bootstrapHost string // host part of the address the user actually typed
 	timeout       time.Duration
 	cacheMutex    sync.RWMutex
 	lookupCache   map[string]bool
