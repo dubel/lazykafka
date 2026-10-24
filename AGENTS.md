@@ -41,8 +41,17 @@ make kafka-up
 make kafka-down
 ```
 
+## Repo, CI and Release Workflow
+- Public repo `dubel/lazykafka` (formerly the private `lazykafka-src`; old `lazykafka-dist` is archived). Roadmap and open work live in GitHub issues, not in docs.
+- `main` is protected by a ruleset: no direct pushes, changes go through a PR with green `lint`, `test` and `integration` checks (`.github/workflows/ci.yml`), squash merge only. The repo admin may merge their own PR without approval: `gh pr merge <n> --squash --admin --delete-branch`.
+- Lint: `golangci-lint run ./...` with `.golangci.yml` (includes gofmt and integration-tagged files). CI also requires `go mod tidy -diff` to be clean.
+- Release: bump `current-version` in a PR, merge, then `make publish` from `main` (tags and pushes `vX.Y.Z`). `.github/workflows/release.yml` runs GoReleaser, which publishes the GitHub Release in this repo, deb/rpm/archlinux packages, the Homebrew formula in `dubel/homebrew-tap` (needs the `GH_PAT_FOR_ACTIONS` secret) and the multi-arch image `ghcr.io/dubel/lazykafka` (`dockers_v2`).
+- `Dockerfile` is release-only: it copies the binary prebuilt by GoReleaser (`$TARGETPLATFORM/lazykafka`) and runs as non-root user `lazykafka`. It cannot be built with a plain `docker build .`; test it with `goreleaser release --snapshot --clean`.
+- `--version` prints the version plus commit and build date injected via ldflags (`main.version`, `main.commit`, `main.date`); local builds fall back to the embedded `current-version`.
+- Release notes are written by hand in `docs/release-notes/<version>.md`; they are not yet wired into GitHub releases (see issues).
+
 ## Integration/Test Details
-- Integration tests are tag-gated with `//go:build integration` (`kafka/manager_integration_test.go`, `ui/tui_simulation_test.go`).
+- Integration tests are tag-gated with `//go:build integration` (`kafka/manager_integration_test.go`, `ui/tui_simulation_test.go`); `make test-integration` runs all packages.
 - Default integration broker is `localhost:19092`; override with `KAFKA_BROKER` env var.
 - Docker Kafka uses KRaft mode and exposes external listener on `localhost:19092` (`docker-compose.yml`).
 
