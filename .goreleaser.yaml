@@ -40,29 +40,22 @@ checksum:
 
 
 
-# Publish the Release (Binaries) to a DIFFERENT, PUBLIC repository
-# This keeps your source code (current repo) private.
+# Publish the GitHub Release in this repository
 release:
-  github:
-    owner: dubel
-    name: lazykafka # MUST be created by you manually
   draft: false # Publish immediately to ensure tag-based URLs work
   prerelease: auto
 
-# Publish the Homebrew Formula to a DIFFERENT, PUBLIC repository
+# Publish the Homebrew Formula to the dubel/homebrew-tap repository
 brews:
   - 
     # The repository to push the formula to
     repository:
       owner: dubel
-      name: homebrew-tap # MUST be created by you manually
-      # token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}" 
-      # We will use the main GITHUB_TOKEN if it has scopes, 
-      # but usually GoReleaser needs a PAT for cross-repo writes.
+      name: homebrew-tap
 
     # The project name and description for the formula
     name: lazykafka
-    homepage: "https://github.com/dubel/lazykafka" # Point to the dist repo since source is private
+    homepage: "https://github.com/dubel/lazykafka"
     description: "Relaxed Kafka TUI for browsing and managing clusters."
     
     # Packages needed by the formula at runtime/install time
