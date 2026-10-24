@@ -29,11 +29,19 @@ type App struct {
 	ManagerMutex       sync.RWMutex
 	InModal            bool
 	Version            string
+	healthMu           sync.Mutex // guards healthCheckCancel; connect runs off the UI goroutine
 	healthCheckCancel  context.CancelFunc
 }
 
+// healthCheckFailuresBeforeDisconnect avoids tearing down the session on a
+// single slow or dropped metadata request.
+const healthCheckFailuresBeforeDisconnect = 3
+
 func NewApp(version string) *App {
 	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Printf("NewApp: ERROR - could not load brokers, starting with an empty list: %v", err)
+	}
 	if err != nil || cfg == nil {
 		cfg = &config.Config{Brokers: []config.Broker{}}
 	}
@@ -273,11 +281,14 @@ func (a *App) startHealthCheck(brokerAddress string) {
 	a.stopHealthCheck() // ensure no previous check is still running
 
 	ctx, cancel := context.WithCancel(context.Background())
+	a.healthMu.Lock()
 	a.healthCheckCancel = cancel
+	a.healthMu.Unlock()
 
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
+		failures := 0
 		for {
 			select {
 			case <-ticker.C:
@@ -288,10 +299,17 @@ func (a *App) startHealthCheck(brokerAddress string) {
 					return // manager already gone, nothing to monitor
 				}
 				if err := mgr.Client.CheckConnection(); err != nil {
-					log.Printf("HealthCheck: connection to %s lost: %v", brokerAddress, err)
-					a.handleConnectionLost(brokerAddress)
-					return
+					failures++
+					log.Printf("HealthCheck: check %d/%d for %s failed: %v",
+						failures, healthCheckFailuresBeforeDisconnect, brokerAddress, err)
+					if failures >= healthCheckFailuresBeforeDisconnect {
+						log.Printf("HealthCheck: connection to %s lost", brokerAddress)
+						a.handleConnectionLost(brokerAddress)
+						return
+					}
+					continue
 				}
+				failures = 0
 			case <-ctx.Done():
 				return
 			}
@@ -301,6 +319,8 @@ func (a *App) startHealthCheck(brokerAddress string) {
 
 // stopHealthCheck cancels any running health-check goroutine.
 func (a *App) stopHealthCheck() {
+	a.healthMu.Lock()
+	defer a.healthMu.Unlock()
 	if a.healthCheckCancel != nil {
 		a.healthCheckCancel()
 		a.healthCheckCancel = nil
@@ -365,7 +385,7 @@ func (a *App) showConnectionLostModal(brokerAddress string) {
 		"[red]Connection to broker\n\n[white::b]%s[red::-]\n\nhas been lost.\n\n"+
 			"[white]Please re-connect via the Brokers panel.\n\n"+
 			"[gray](press any key to dismiss)",
-		brokerAddress,
+		tview.Escape(brokerAddress),
 	)
 
 	textView := tview.NewTextView().

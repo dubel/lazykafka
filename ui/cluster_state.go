@@ -1,14 +1,19 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"sort"
+	"time"
 
 	"github.com/dubel/lazykafka/kafka"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
+
+// clusterStateTimeout bounds how long the loading screen waits for the broker.
+const clusterStateTimeout = 15 * time.Second
 
 // showClusterState opens a full-screen view with cluster health and consumer group lag.
 func (p *BrokersPanel) showClusterState() {
@@ -20,12 +25,21 @@ func (p *BrokersPanel) showClusterState() {
 func (p *BrokersPanel) showClusterStateOnPage(initialPage int) {
 	p.App.InModal = true
 
+	// Only the latest request may render: Esc or a refresh cancels the previous
+	// one so a late result cannot replace whatever is on screen by then.
+	if p.clusterCancel != nil {
+		p.clusterCancel()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	p.clusterCancel = cancel
+
 	loading := tview.NewTextView().
 		SetText("\n\n  Loading cluster state...").
 		SetDynamicColors(true)
 	loading.SetBorder(true).SetTitle("  Cluster State  ").SetTitleAlign(tview.AlignCenter)
 	loading.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
+			cancel()
 			p.App.InModal = false
 			p.App.TviewApp.SetRoot(p.App.Grid, true)
 			p.App.TviewApp.SetFocus(p.App.BrokersPanel.View)
@@ -47,16 +61,34 @@ func (p *BrokersPanel) showClusterStateOnPage(initialPage int) {
 			return
 		}
 
-		state, err := mgr.GetClusterState()
-		if err != nil {
-			p.App.TviewApp.QueueUpdateDraw(func() {
-				p.showClusterError(fmt.Sprintf("Error: %v", err))
-			})
+		type result struct {
+			state *kafka.ClusterState
+			err   error
+		}
+		done := make(chan result, 1)
+		go func() {
+			state, err := mgr.GetClusterState()
+			done <- result{state, err}
+		}()
+
+		var res result
+		select {
+		case res = <-done:
+		case <-time.After(clusterStateTimeout):
+			res.err = fmt.Errorf("timed out after %v", clusterStateTimeout)
+		case <-ctx.Done():
 			return
 		}
 
 		p.App.TviewApp.QueueUpdateDraw(func() {
-			p.renderClusterState(state, initialPage)
+			if ctx.Err() != nil {
+				return // user left or refreshed while the result was queued
+			}
+			if res.err != nil {
+				p.showClusterError("Error: " + tview.Escape(res.err.Error()))
+				return
+			}
+			p.renderClusterState(res.state, initialPage)
 		})
 	}()
 }
@@ -108,7 +140,7 @@ func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState, initialPage
 			ctrl = "✓"
 		}
 		brokerTable.SetCell(r+1, 0, tview.NewTableCell(fmt.Sprintf("%d", b.ID)))
-		brokerTable.SetCell(r+1, 1, tview.NewTableCell(b.Address))
+		brokerTable.SetCell(r+1, 1, tview.NewTableCell(tview.Escape(b.Address)))
 		brokerTable.SetCell(r+1, 2, tview.NewTableCell(ctrl).SetTextColor(tcell.ColorGreen))
 		brokerTable.SetCell(r+1, 3, tview.NewTableCell(fmt.Sprintf("%d", b.LeaderCount)))
 		brokerTable.SetCell(r+1, 4, tview.NewTableCell(fmt.Sprintf("%d", b.ReplicaCount)))
@@ -226,8 +258,8 @@ func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState, initialPage
 			}
 		}
 
-		groupTable.SetCell(r+1, 0, tview.NewTableCell(g.Name))
-		groupTable.SetCell(r+1, 1, tview.NewTableCell(g.State).SetTextColor(stateColor))
+		groupTable.SetCell(r+1, 0, tview.NewTableCell(tview.Escape(g.Name)))
+		groupTable.SetCell(r+1, 1, tview.NewTableCell(tview.Escape(g.State)).SetTextColor(stateColor))
 		groupTable.SetCell(r+1, 2, tview.NewTableCell(fmt.Sprintf("%d", g.Members)))
 		groupTable.SetCell(r+1, 3, tview.NewTableCell(fmt.Sprintf("%d", g.TotalLag)).SetTextColor(lagColor))
 		groupTable.SetCell(r+1, 4, tview.NewTableCell(topTopic))
@@ -269,7 +301,7 @@ func (p *BrokersPanel) renderClusterState(state *kafka.ClusterState, initialPage
 		_ = source // we use sourceColor on the cell directly
 
 		configTable.SetCell(r+1, 0, tview.NewTableCell(ce.Key))
-		configTable.SetCell(r+1, 1, tview.NewTableCell(ce.Value).SetTextColor(tcell.ColorWhite))
+		configTable.SetCell(r+1, 1, tview.NewTableCell(tview.Escape(ce.Value)).SetTextColor(tcell.ColorWhite))
 		configTable.SetCell(r+1, 2, tview.NewTableCell(func() string {
 			if ce.IsDefault {
 				return "default"
@@ -397,7 +429,7 @@ func (p *BrokersPanel) deleteSelectedConsumerGroup(groupTable *tview.Table, grou
 		log.Printf("UI: Cannot delete consumer group '%s' — %d active member(s)", group.Name, group.Members)
 		p.showClusterMessage(
 			fmt.Sprintf("[red]Cannot delete group '[white]%s[red]'\n\nGroup has %d active member(s).\nStop all consumers in this group before deleting.\n\n[gray](press any key to dismiss)",
-				group.Name, group.Members),
+				tview.Escape(group.Name), group.Members),
 			"  ⚠  Active Members  ⚠  ",
 			tcell.ColorRed,
 			state,
@@ -409,7 +441,7 @@ func (p *BrokersPanel) deleteSelectedConsumerGroup(groupTable *tview.Table, grou
 	log.Printf("UI: Requesting deletion of consumer group: %s", group.Name)
 	message := fmt.Sprintf(
 		"Delete consumer group\n\n[white::b]%s[-::-]\n\n[gray]State: %s | Lag: %d\n\n[white](Enter) confirm | (Esc) cancel",
-		group.Name, group.State, group.TotalLag,
+		tview.Escape(group.Name), tview.Escape(group.State), group.TotalLag,
 	)
 
 	textView := tview.NewTextView().
@@ -453,7 +485,7 @@ func (p *BrokersPanel) deleteSelectedConsumerGroup(groupTable *tview.Table, grou
 func (p *BrokersPanel) executeDeleteConsumerGroup(groupName string) {
 	// Show a brief "deleting..." message.
 	loading := tview.NewTextView().
-		SetText(fmt.Sprintf("\n\n  Deleting consumer group '%s'...", groupName)).
+		SetText(fmt.Sprintf("\n\n  Deleting consumer group '%s'...", tview.Escape(groupName))).
 		SetDynamicColors(true)
 	loading.SetBorder(true).SetTitle("  Cluster State  ").SetTitleAlign(tview.AlignCenter)
 	p.App.TviewApp.SetRoot(loading, true)
@@ -474,7 +506,7 @@ func (p *BrokersPanel) executeDeleteConsumerGroup(groupName string) {
 		if err != nil {
 			log.Printf("UI: Failed to delete consumer group %s: %v", groupName, err)
 			p.App.TviewApp.QueueUpdateDraw(func() {
-				p.showClusterError(fmt.Sprintf("[red]Failed to delete consumer group '[white]%s[red]':\n\n%v\n\n[gray](press Esc to close)", groupName, err))
+				p.showClusterError(fmt.Sprintf("[red]Failed to delete consumer group '[white]%s[red]':\n\n%s\n\n[gray](press Esc to close)", tview.Escape(groupName), tview.Escape(err.Error())))
 			})
 			return
 		}

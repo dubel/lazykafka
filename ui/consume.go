@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -24,18 +25,29 @@ type ConsumePanel struct {
 	ResetTimer    *time.Timer
 	CurrentTopic  string
 	FromBeginning bool
+	cancelMu      sync.Mutex         // guards cancelFunc; StopConsuming is called from connection goroutines
 	cancelFunc    context.CancelFunc // Replaces StopChan for cleaner cancellation
-	LastMessage   string             // last consumed message, used for copy-to-clipboard
+	LastMessage   string             // last consumed message, used for copy-to-clipboard (UI goroutine only)
+}
+
+// maxConsumeLines caps the consume view so long-running or "from beginning"
+// sessions do not grow memory and redraw cost without bound.
+const maxConsumeLines = 2000
+
+// consumeFlushInterval batches incoming messages into one UI update.
+const consumeFlushInterval = 50 * time.Millisecond
+
+// consumeLine is one pending entry for the consume view: a message or an error.
+type consumeLine struct {
+	text  string
+	isErr bool
 }
 
 func NewConsumePanel(app *App) *ConsumePanel {
 	textView := tview.NewTextView()
 	textView.SetScrollable(true)
 	textView.SetDynamicColors(true)
-	textView.SetChangedFunc(func() {
-		textView.ScrollToEnd()
-		app.TviewApp.Draw()
-	})
+	textView.SetMaxLines(maxConsumeLines)
 
 	footer := tview.NewTextView().
 		SetText("(t)oggle from beginning | (c)opy last msg").
@@ -105,11 +117,7 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 	log.Printf("StartConsuming: Starting consumption for topic: %s, FromBeginning: %v", topic, p.FromBeginning)
 
 	// Cancel any previous consumption
-	if p.cancelFunc != nil {
-		log.Println("StartConsuming: Cancelling previous consumption")
-		p.cancelFunc()
-		p.cancelFunc = nil
-	}
+	p.StopConsuming()
 
 	p.CurrentTopic = topic
 	p.LastMessage = ""
@@ -131,7 +139,9 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 
 	// Create a cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
+	p.cancelMu.Lock()
 	p.cancelFunc = cancel
+	p.cancelMu.Unlock()
 
 	messages := make(chan string)
 	errors := make(chan error)
@@ -142,22 +152,42 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 	log.Printf("StartConsuming: Started consuming messages from topic: %s", topic)
 
 	go func() {
+		ticker := time.NewTicker(consumeFlushInterval)
+		defer ticker.Stop()
+
 		messageCount := 0
+		var pending []consumeLine
 		for {
 			select {
 			case msg := <-messages:
 				messageCount++
-				p.LastMessage = msg
+				pending = append(pending, consumeLine{text: msg})
 				if messageCount%100 == 0 {
 					log.Printf("StartConsuming: Received %d messages from topic: %s", messageCount, topic)
 				}
-				p.App.TviewApp.QueueUpdateDraw(func() {
-					fmt.Fprintln(p.TextView, msg)
-				})
 			case err := <-errors:
 				log.Printf("StartConsuming: ERROR - Consumption error for topic %s: %v", topic, err)
+				pending = append(pending, consumeLine{text: err.Error(), isErr: true})
+			case <-ticker.C:
+				if len(pending) == 0 {
+					continue
+				}
+				batch := pending
+				pending = nil
 				p.App.TviewApp.QueueUpdateDraw(func() {
-					fmt.Fprintf(p.TextView, "[red]Error: %v[white]\n", err)
+					// A newer consumer may have replaced this one while the update was queued.
+					if ctx.Err() != nil {
+						return
+					}
+					for _, line := range batch {
+						if line.isErr {
+							fmt.Fprintf(p.TextView, "[red]Error: %s[-]\n", tview.Escape(line.text))
+							continue
+						}
+						p.LastMessage = line.text
+						fmt.Fprintln(p.TextView, tview.Escape(line.text))
+					}
+					p.TextView.ScrollToEnd()
 				})
 			case <-ctx.Done():
 				log.Printf("StartConsuming: Stopped consuming from topic: %s (received %d messages)", topic, messageCount)
@@ -167,8 +197,11 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 	}()
 }
 
-// StopConsuming cancels any active message consumption
+// StopConsuming cancels any active message consumption.
+// Safe to call from any goroutine.
 func (p *ConsumePanel) StopConsuming() {
+	p.cancelMu.Lock()
+	defer p.cancelMu.Unlock()
 	if p.cancelFunc != nil {
 		log.Println("StopConsuming: Cancelling active consumption")
 		p.cancelFunc()

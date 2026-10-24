@@ -1,12 +1,15 @@
 package ui
 
 import (
+	"errors"
 	"log"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
+
+var errNotConnected = errors.New("not connected to a broker")
 
 type ProducePanel struct {
 	App          *App
@@ -71,39 +74,54 @@ func NewProducePanel(app *App) *ProducePanel {
 		isCtrlS := event.Key() == tcell.KeyCtrlS
 		if isAltEnter || isCtrlS {
 			text := p.TextArea.GetText()
+			topic := p.CurrentTopic
 
 			p.App.ManagerMutex.RLock()
-			if p.CurrentTopic == "" || p.App.KafkaManager == nil {
-				p.App.ManagerMutex.RUnlock()
+			connected := p.App.KafkaManager != nil
+			p.App.ManagerMutex.RUnlock()
 
+			if topic == "" || !connected {
 				p.showTemporaryMessage("[red]No broker and topic selected - we need to connect first!", 5*time.Second)
 
-				if p.CurrentTopic == "" {
+				if topic == "" {
 					log.Println("ProduceMessage: No topic selected, ignoring")
-				} else if p.App.KafkaManager == nil {
+				} else {
 					log.Println("ProduceMessage: ERROR - KafkaManager is nil")
 				}
 				return nil
 			}
 
 			if text == "" {
-				p.App.ManagerMutex.RUnlock()
 				log.Println("ProduceMessage: Empty message, ignoring")
 				return nil
 			}
 
-			log.Printf("ProduceMessage: Sending message to topic '%s': %s", p.CurrentTopic, text)
-			err := p.App.KafkaManager.ProduceMessage(p.CurrentTopic, text)
-			p.App.ManagerMutex.RUnlock()
+			// Send off the UI goroutine: a slow or unreachable broker must not freeze input.
+			p.showTemporaryMessage("[yellow]Sending...", 15*time.Second)
+			go func() {
+				p.App.ManagerMutex.RLock()
+				mgr := p.App.KafkaManager
+				err := errNotConnected
+				if mgr != nil {
+					log.Printf("ProduceMessage: Sending %d bytes to topic '%s'", len(text), topic)
+					err = mgr.ProduceMessage(topic, text)
+				}
+				p.App.ManagerMutex.RUnlock()
 
-			if err != nil {
-				log.Printf("ProduceMessage: ERROR - Failed to produce message to topic '%s': %v", p.CurrentTopic, err)
-				p.showTemporaryMessage("[red]Failed to send message!", 5*time.Second)
-			} else {
-				log.Printf("ProduceMessage: Successfully sent message to topic '%s'", p.CurrentTopic)
-				p.TextArea.SetText("", true)
-				p.showTemporaryMessage("[green]Message sent!", 2*time.Second)
-			}
+				p.App.TviewApp.QueueUpdateDraw(func() {
+					if err != nil {
+						log.Printf("ProduceMessage: ERROR - Failed to produce message to topic '%s': %v", topic, err)
+						p.showTemporaryMessage("[red]Failed to send message!", 5*time.Second)
+						return
+					}
+					log.Printf("ProduceMessage: Successfully sent message to topic '%s'", topic)
+					// Keep anything the user typed while the send was in flight.
+					if p.TextArea.GetText() == text {
+						p.TextArea.SetText("", true)
+					}
+					p.showTemporaryMessage("[green]Message sent!", 2*time.Second)
+				})
+			}()
 			return nil
 		}
 		return event

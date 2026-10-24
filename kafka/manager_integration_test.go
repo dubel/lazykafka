@@ -331,3 +331,89 @@ func TestManager_GetClusterState_Performance(t *testing.T) {
 		t.Errorf("GetClusterState took %v, expected < %v (possible sequential regression)", elapsed, deadline)
 	}
 }
+
+// TestManager_GetClusterState_WhileConsuming guards against head-of-line
+// blocking: offset lookups must not queue behind the consumer's long-polling
+// fetch requests (this used to take ~20 s on a 28-topic demo cluster).
+func TestManager_GetClusterState_WhileConsuming(t *testing.T) {
+	skipIfNoKafka(t)
+
+	manager, err := kafka.NewManager([]string{getTestBroker()})
+	if err != nil {
+		t.Fatalf("Failed to create manager: %v", err)
+	}
+	defer manager.Close()
+
+	topic := "test-cluster-state-while-consuming"
+	_ = manager.CreateTopic(topic)
+	time.Sleep(500 * time.Millisecond)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	messages := make(chan string, 10)
+	errors := make(chan error, 10)
+	go manager.ConsumeTopic(ctx, topic, false, messages, errors)
+	go func() {
+		for {
+			select {
+			case <-messages:
+			case <-errors:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	time.Sleep(2 * time.Second) // let partition consumers start fetching
+
+	start := time.Now()
+	if _, err := manager.GetClusterState(); err != nil {
+		t.Fatalf("GetClusterState failed: %v", err)
+	}
+	elapsed := time.Since(start)
+	t.Logf("GetClusterState with active consumer: %v", elapsed)
+
+	const deadline = 3 * time.Second
+	if elapsed > deadline {
+		t.Errorf("GetClusterState took %v with an active consumer, expected < %v", elapsed, deadline)
+	}
+}
+
+// TestManager_ConsumeTopic_StopsWhenReaderGone verifies that ConsumeTopic
+// returns after cancellation even when nobody reads the channels anymore
+// (previously partition goroutines blocked forever on the send).
+func TestManager_ConsumeTopic_StopsWhenReaderGone(t *testing.T) {
+	skipIfNoKafka(t)
+
+	manager, err := kafka.NewManager([]string{getTestBroker()})
+	if err != nil {
+		t.Fatalf("Failed to create manager: %v", err)
+	}
+	defer manager.Close()
+
+	topic := "test-consume-reader-gone"
+	_ = manager.CreateTopic(topic)
+	time.Sleep(500 * time.Millisecond)
+	for i := 0; i < 5; i++ {
+		if err := manager.ProduceMessage(topic, "msg"); err != nil {
+			t.Fatalf("produce: %v", err)
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	messages := make(chan string) // unbuffered and never read
+	errors := make(chan error)
+	done := make(chan struct{})
+	go func() {
+		manager.ConsumeTopic(ctx, topic, true, messages, errors)
+		close(done)
+	}()
+
+	time.Sleep(2 * time.Second) // partition consumers are now blocked on send
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ConsumeTopic did not return after cancellation with no reader")
+	}
+}

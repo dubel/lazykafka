@@ -424,7 +424,56 @@ func (p *TopicsPanel) deleteSelectedTopic() {
 		return
 	}
 	log.Printf("UI: Requesting deletion of topic: %s", topicName)
+	p.showDeleteTopicConfirm(topicName)
+}
 
+// showDeleteTopicConfirm asks for confirmation before deleting a topic;
+// a stray 'r' must not wipe a topic with data.
+func (p *TopicsPanel) showDeleteTopicConfirm(topicName string) {
+	closeModal := func() {
+		p.App.InModal = false
+		p.App.TviewApp.SetRoot(p.App.Grid, true)
+		p.App.TviewApp.SetFocus(p.View)
+	}
+
+	textView := tview.NewTextView().
+		SetText("Delete topic\n\n[white::b]" + topicName + "[-::-]\n\n[red]All messages in this topic will be lost.\n\n[white](Enter) confirm | (Esc) cancel").
+		SetTextAlign(tview.AlignCenter).
+		SetDynamicColors(true)
+
+	textView.SetBorder(true).
+		SetTitle("  Delete Topic  ").
+		SetTitleAlign(tview.AlignCenter).
+		SetBorderColor(tcell.ColorRed)
+
+	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyEscape:
+			log.Printf("UI: Deletion of topic %s cancelled", topicName)
+			closeModal()
+			return nil
+		case tcell.KeyEnter:
+			closeModal()
+			p.executeDeleteTopic(topicName)
+			return nil
+		}
+		return event
+	})
+
+	modal := tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(textView, 10, 0, true).
+			AddItem(nil, 0, 1, false),
+			60, 0, true).
+		AddItem(nil, 0, 1, false)
+
+	p.App.InModal = true
+	p.App.TviewApp.SetRoot(modal, true)
+}
+
+func (p *TopicsPanel) executeDeleteTopic(topicName string) {
 	go func() {
 		p.App.ManagerMutex.RLock()
 		if p.App.KafkaManager != nil {

@@ -1,6 +1,10 @@
 package ui
 
 import (
+	"context"
+	"log"
+	"time"
+
 	"github.com/dubel/lazykafka/config"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -10,14 +14,46 @@ type BrokersPanel struct {
 	App              *App
 	View             tview.Primitive
 	ListView         *tview.List
-	ConnectedAddress string // address of the currently connected broker
+	Footer           *tview.TextView
+	ConnectedAddress string             // address of the currently connected broker
+	clusterCancel    context.CancelFunc // cancels the in-flight cluster state request (UI goroutine only)
+	footerTimer      *time.Timer
+}
+
+const brokersFooterText = "(a)dd | (e)dit | (r)emove | (d)etails | (enter) to connect"
+
+// brokerLabel is the list label for a broker; user input is escaped so
+// brackets in an address or alias are not read as tview color tags.
+func brokerLabel(b config.Broker) string {
+	label := b.Address
+	if b.Alias != "" {
+		label += " (" + b.Alias + ")"
+	}
+	return tview.Escape(label)
+}
+
+// saveConfig persists the broker list and reports failures in the footer
+// instead of silently losing the change.
+func (p *BrokersPanel) saveConfig() {
+	if err := config.SaveConfig(p.App.Config); err != nil {
+		log.Printf("BrokersPanel: ERROR - failed to save brokers: %v", err)
+		p.Footer.SetText("[red]Failed to save brokers: " + tview.Escape(err.Error()))
+		if p.footerTimer != nil {
+			p.footerTimer.Stop()
+		}
+		p.footerTimer = time.AfterFunc(5*time.Second, func() {
+			p.App.TviewApp.QueueUpdateDraw(func() {
+				p.Footer.SetText(brokersFooterText)
+			})
+		})
+	}
 }
 
 func NewBrokersPanel(app *App) *BrokersPanel {
 	listView := tview.NewList()
 
 	footer := tview.NewTextView().
-		SetText("(a)dd | (e)dit | (r)emove | (d)etails | (enter) to connect").
+		SetText(brokersFooterText).
 		SetTextAlign(tview.AlignCenter).
 		SetDynamicColors(true)
 
@@ -42,6 +78,7 @@ func NewBrokersPanel(app *App) *BrokersPanel {
 		App:      app,
 		View:     flex,
 		ListView: listView,
+		Footer:   footer,
 	}
 
 	p.refreshList()
@@ -112,10 +149,7 @@ func (p *BrokersPanel) refreshList() {
 		broker := b
 		index := i
 
-		displayText := broker.Address
-		if broker.Alias != "" {
-			displayText += " (" + broker.Alias + ")"
-		}
+		displayText := brokerLabel(broker)
 
 		// Highlight the currently connected broker with a green background
 		itemText := displayText
@@ -127,10 +161,7 @@ func (p *BrokersPanel) refreshList() {
 			// On select, connect to broker
 			p.resetStatuses()
 
-			statusText := broker.Address
-			if broker.Alias != "" {
-				statusText += " (" + broker.Alias + ")"
-			}
+			statusText := brokerLabel(broker)
 			p.ListView.SetItemText(index, statusText+" (connecting...)", "")
 
 			go func() {
@@ -170,7 +201,7 @@ func (p *BrokersPanel) showAddBrokerModal() {
 				Alias:   alias,
 			}
 			p.App.Config.Brokers = append(p.App.Config.Brokers, newBroker)
-			config.SaveConfig(p.App.Config)
+			p.saveConfig()
 			p.refreshList()
 
 			// Auto-connect to the new broker
@@ -228,7 +259,7 @@ func (p *BrokersPanel) showEditBrokerModal() {
 		if addr != "" {
 			p.App.Config.Brokers[idx].Address = addr
 			p.App.Config.Brokers[idx].Alias = alias
-			config.SaveConfig(p.App.Config)
+			p.saveConfig()
 			p.refreshList()
 		}
 		p.App.InModal = false
@@ -260,7 +291,7 @@ func (p *BrokersPanel) removeCurrentBroker() {
 	if idx < len(p.App.Config.Brokers) {
 		// Remove from config using index
 		p.App.Config.Brokers = append(p.App.Config.Brokers[:idx], p.App.Config.Brokers[idx+1:]...)
-		config.SaveConfig(p.App.Config)
+		p.saveConfig()
 		p.refreshList()
 	}
 }
@@ -268,12 +299,7 @@ func (p *BrokersPanel) removeCurrentBroker() {
 func (p *BrokersPanel) resetStatuses() {
 	p.ConnectedAddress = ""
 	for i := 0; i < len(p.App.Config.Brokers); i++ {
-		b := p.App.Config.Brokers[i]
-		text := b.Address
-		if b.Alias != "" {
-			text += " (" + b.Alias + ")"
-		}
-		p.ListView.SetItemText(i, text, "")
+		p.ListView.SetItemText(i, brokerLabel(p.App.Config.Brokers[i]), "")
 	}
 }
 
@@ -290,10 +316,5 @@ func (p *BrokersPanel) connectedDisplayText(index int) string {
 	if index < 0 || index >= len(p.App.Config.Brokers) {
 		return ""
 	}
-	broker := p.App.Config.Brokers[index]
-	displayText := broker.Address
-	if broker.Alias != "" {
-		displayText += " (" + broker.Alias + ")"
-	}
-	return displayText
+	return brokerLabel(p.App.Config.Brokers[index])
 }

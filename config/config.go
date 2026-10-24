@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,7 +37,14 @@ func LoadConfig() (*Config, error) {
 
 	var cfg Config
 	if err := json.NewDecoder(file).Decode(&cfg); err != nil {
-		return nil, err
+		file.Close()
+		// Keep the unreadable file: otherwise the next save would replace it
+		// with an empty broker list and the user's brokers would be gone.
+		backup, bErr := backupCorrupt(path)
+		if bErr != nil {
+			return nil, fmt.Errorf("parse %s: %w (backup failed: %v)", path, err, bErr)
+		}
+		return nil, fmt.Errorf("parse %s: %w (moved to %s)", path, err, backup)
 	}
 	return &cfg, nil
 }
@@ -52,14 +60,7 @@ func SaveConfig(cfg *Config) error {
 		return err
 	}
 
-	path := filepath.Join(dir, "brokers.json")
-	file, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	return json.NewEncoder(file).Encode(cfg)
+	return writeJSONAtomic(filepath.Join(dir, "brokers.json"), cfg)
 }
 
 type Settings struct {
@@ -86,6 +87,10 @@ func LoadSettings() (*Settings, error) {
 
 	var settings Settings
 	if err := json.NewDecoder(file).Decode(&settings); err != nil {
+		file.Close()
+		if backup, bErr := backupCorrupt(path); bErr == nil {
+			log.Printf("LoadSettings: unreadable %s moved to %s: %v", path, backup, err)
+		}
 		return &Settings{ShowSplashOnStartup: true, CheckForUpdates: false}, nil
 	}
 	return &settings, nil
@@ -102,14 +107,41 @@ func SaveSettings(settings *Settings) error {
 		return err
 	}
 
-	path := filepath.Join(dir, "settings.json")
-	file, err := os.Create(path)
+	return writeJSONAtomic(filepath.Join(dir, "settings.json"), settings)
+}
+
+// writeJSONAtomic writes v to a temp file in the same directory and renames it
+// over path, so a crash mid-write never leaves a truncated config behind.
+// Files are 0600: they describe internal infrastructure.
+func writeJSONAtomic(path string, v any) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer os.Remove(tmp.Name()) // no-op after a successful rename
 
-	return json.NewEncoder(file).Encode(settings)
+	if err := json.NewEncoder(tmp).Encode(v); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0600); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
+}
+
+// backupCorrupt moves an unreadable config file aside and returns its new path.
+func backupCorrupt(path string) (string, error) {
+	backup := fmt.Sprintf("%s.corrupt-%s", path, time.Now().Format("20060102-150405"))
+	return backup, os.Rename(path, backup)
 }
 
 // GetLogDir returns the path to the log directory in the user's home directory

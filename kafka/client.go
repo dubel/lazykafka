@@ -81,7 +81,9 @@ type Client struct {
 	Brokers      []string
 }
 
-func NewClient(brokers []string) (*Client, error) {
+// newSaramaConfig builds the shared client configuration used by the main
+// client, the per-topic consumer clients and the cluster admin.
+func newSaramaConfig(brokers []string) *sarama.Config {
 	config := sarama.NewConfig()
 	config.Version = sarama.V2_8_0_0 // Assume a relatively recent version
 	config.Consumer.Return.Errors = true
@@ -101,7 +103,11 @@ func NewClient(brokers []string) (*Client, error) {
 		config.Net.Proxy.Dialer = newBootstrapFallbackDialer(brokers[0], config.Net.DialTimeout)
 	}
 
-	client, err := sarama.NewClient(brokers, config)
+	return config
+}
+
+func NewClient(brokers []string) (*Client, error) {
+	client, err := sarama.NewClient(brokers, newSaramaConfig(brokers))
 	if err != nil {
 		return nil, err
 	}

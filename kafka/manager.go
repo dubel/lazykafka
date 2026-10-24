@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"sync"
-	"time"
 
 	"github.com/IBM/sarama"
 )
@@ -102,16 +101,31 @@ func (m *Manager) ProduceMessage(topic, value string) error {
 // It uses context for cancellation and WaitGroup for clean goroutine shutdown.
 // The function blocks until the context is cancelled and all partition consumers have stopped.
 func (m *Manager) ConsumeTopic(ctx context.Context, topic string, fromBeginning bool, messages chan<- string, errors chan<- error) {
-	consumer, err := sarama.NewConsumerFromClient(m.Client.saramaClient)
+	// Sends must never block past cancellation: the reader stops reading once
+	// ctx is done, and a blocked send would leak this goroutine and the consumer.
+	sendErr := func(err error) bool {
+		select {
+		case errors <- err:
+			return true
+		case <-ctx.Done():
+			return false
+		}
+	}
+
+	// The consumer gets its own client (and broker connections). Fetch requests
+	// long-poll on the broker, and Kafka answers requests on one connection in
+	// order, so sharing the main client would stall metadata, offset and
+	// health-check requests behind every fetch.
+	consumer, err := sarama.NewConsumer(m.Client.Brokers, newSaramaConfig(m.Client.Brokers))
 	if err != nil {
-		errors <- err
+		sendErr(err)
 		return
 	}
 	defer consumer.Close()
 
 	partitions, err := m.Client.GetPartitions(topic)
 	if err != nil {
-		errors <- err
+		sendErr(err)
 		return
 	}
 
@@ -125,7 +139,7 @@ func (m *Manager) ConsumeTopic(ctx context.Context, topic string, fromBeginning 
 
 		pc, err := consumer.ConsumePartition(topic, partition, offset)
 		if err != nil {
-			errors <- fmt.Errorf("failed to start consumer for partition %d: %w", partition, err)
+			sendErr(fmt.Errorf("failed to start consumer for partition %d: %w", partition, err))
 			continue
 		}
 
@@ -137,11 +151,14 @@ func (m *Manager) ConsumeTopic(ctx context.Context, topic string, fromBeginning 
 				select {
 				case msg := <-pc.Messages():
 					if msg != nil {
-						messages <- fmt.Sprintf("[P%d] %s", msg.Partition, string(msg.Value))
+						select {
+						case messages <- fmt.Sprintf("[P%d] %s", msg.Partition, string(msg.Value)):
+						case <-ctx.Done():
+						}
 					}
 				case err := <-pc.Errors():
 					if err != nil {
-						errors <- err
+						sendErr(err)
 					}
 				case <-ctx.Done():
 					log.Printf("ConsumeTopic: Partition %d consumer stopping (context cancelled)", partitionID)
@@ -196,92 +213,96 @@ func (m *Manager) GetClusterState() (*ClusterState, error) {
 		TotalTopics:  len(topics),
 	}
 
-	newestOffsetsMap := make(map[string]map[int32]int64)
-	var wg sync.WaitGroup
-	var stateMu sync.Mutex
+	// Partition layout comes from the client's cached metadata (no network).
+	topicPartitions := make(map[string][]int32, len(topics))
+	byLeader := make(map[int32][]topicPartition)
+	leaders := make(map[int32]*sarama.Broker)
+	for _, t := range topics {
+		partitions, err := m.Client.GetPartitions(t)
+		if err != nil {
+			continue
+		}
+		topicPartitions[t] = partitions
+		state.TotalPartitions += len(partitions)
 
-	for _, topic := range topics {
-		wg.Add(1)
-		go func(t string) {
-			defer wg.Done()
+		for _, p := range partitions {
+			leader, err := m.Client.Leader(t, p)
+			replicas, _ := m.Client.Replicas(t, p)
+			isr, _ := m.Client.InSyncReplicas(t, p)
 
-			partitions, err := m.Client.GetPartitions(t)
-			if err != nil {
-				return
+			if err == nil && leader != nil {
+				if bi, ok := brokerMap[leader.ID()]; ok {
+					bi.LeaderCount++
+				}
+				leaders[leader.ID()] = leader
+				byLeader[leader.ID()] = append(byLeader[leader.ID()], topicPartition{t, p})
+			} else {
+				state.OfflinePartitionCount++
 			}
 
-			stateMu.Lock()
-			state.TotalPartitions += len(partitions)
-			stateMu.Unlock()
-
-			ti := TopicOffsetInfo{
-				Name:       t,
-				Partitions: len(partitions),
-			}
-			firstPartition := true
-
-			localOffline := 0
-			localUnderReplicated := 0
-			localLeaderCounts := make(map[int32]int)
-			localReplicaCounts := make(map[int32]int)
-			localNewestOffsets := make(map[int32]int64)
-
-			for _, p := range partitions {
-				leader, err := m.Client.Leader(t, p)
-				replicas, _ := m.Client.Replicas(t, p)
-				isr, _ := m.Client.InSyncReplicas(t, p)
-
-				if err == nil && leader != nil {
-					localLeaderCounts[leader.ID()]++
-				} else {
-					localOffline++
-				}
-
-				for _, r := range replicas {
-					localReplicaCounts[r]++
-				}
-
-				if len(isr) < len(replicas) {
-					localUnderReplicated++
-				}
-
-				// Collect offset info for topic offsets section
-				newest, errN := m.Client.GetOffset(t, p, sarama.OffsetNewest)
-				oldest, errO := m.Client.GetOffset(t, p, sarama.OffsetOldest)
-				if errN == nil && errO == nil {
-					localNewestOffsets[p] = newest
-					ti.TotalMessages += newest - oldest
-					if newest > ti.NewestOffset {
-						ti.NewestOffset = newest
-					}
-					if firstPartition || oldest < ti.OldestOffset {
-						ti.OldestOffset = oldest
-						firstPartition = false
-					}
+			for _, r := range replicas {
+				if bi, ok := brokerMap[r]; ok {
+					bi.ReplicaCount++
 				}
 			}
 
-			stateMu.Lock()
-			state.OfflinePartitionCount += localOffline
-			state.UnderReplicatedCount += localUnderReplicated
-			for id, count := range localLeaderCounts {
-				if bi, ok := brokerMap[id]; ok {
-					bi.LeaderCount += count
-				}
+			if len(isr) < len(replicas) {
+				state.UnderReplicatedCount++
 			}
-			for id, count := range localReplicaCounts {
-				if bi, ok := brokerMap[id]; ok {
-					bi.ReplicaCount += count
-				}
-			}
-			state.TopicOffsets = append(state.TopicOffsets, ti)
-			newestOffsetsMap[t] = localNewestOffsets
-			stateMu.Unlock()
-
-		}(topic)
+		}
 	}
 
+	// Offsets: one batched ListOffsets request per leader and direction instead
+	// of two round-trips per partition.
+	newestOffsets := make(map[topicPartition]int64)
+	oldestOffsets := make(map[topicPartition]int64)
+	var wg sync.WaitGroup
+	var offsetsMu sync.Mutex
+	for id, parts := range byLeader {
+		wg.Add(1)
+		go func(b *sarama.Broker, parts []topicPartition) {
+			defer wg.Done()
+			newest := fetchOffsets(b, parts, sarama.OffsetNewest)
+			oldest := fetchOffsets(b, parts, sarama.OffsetOldest)
+			offsetsMu.Lock()
+			for tp, o := range newest {
+				newestOffsets[tp] = o
+			}
+			for tp, o := range oldest {
+				oldestOffsets[tp] = o
+			}
+			offsetsMu.Unlock()
+		}(leaders[id], parts)
+	}
 	wg.Wait()
+
+	for _, t := range topics {
+		partitions, ok := topicPartitions[t]
+		if !ok {
+			continue
+		}
+		ti := TopicOffsetInfo{
+			Name:       t,
+			Partitions: len(partitions),
+		}
+		firstPartition := true
+		for _, p := range partitions {
+			newest, okN := newestOffsets[topicPartition{t, p}]
+			oldest, okO := oldestOffsets[topicPartition{t, p}]
+			if !okN || !okO {
+				continue
+			}
+			ti.TotalMessages += newest - oldest
+			if newest > ti.NewestOffset {
+				ti.NewestOffset = newest
+			}
+			if firstPartition || oldest < ti.OldestOffset {
+				ti.OldestOffset = oldest
+				firstPartition = false
+			}
+		}
+		state.TopicOffsets = append(state.TopicOffsets, ti)
+	}
 
 	for _, bi := range brokerMap {
 		state.Brokers = append(state.Brokers, *bi)
@@ -373,19 +394,9 @@ func (m *Manager) GetClusterState() (*ClusterState, error) {
 						continue
 					}
 
-					var newest int64
-					// Reuse the newest offset we already fetched concurrently
-					if tmap, ok := newestOffsetsMap[topic]; ok {
-						if n, ok := tmap[partition]; ok {
-							newest = n
-						}
-					}
-
-					if newest == 0 {
-						n, err := m.Client.GetOffset(topic, partition, sarama.OffsetNewest)
-						if err == nil {
-							newest = n
-						}
+					newest, ok := newestOffsets[topicPartition{topic, partition}]
+					if !ok {
+						continue
 					}
 
 					lag := newest - block.Offset
@@ -411,18 +422,35 @@ func (m *Manager) GetClusterState() (*ClusterState, error) {
 }
 
 func (m *Manager) getAdminConfig() *sarama.Config {
-	config := sarama.NewConfig()
-	config.Version = sarama.V2_8_0_0
-	config.Net.DialTimeout = 5 * time.Second
+	return newSaramaConfig(m.Client.Brokers)
+}
 
-	// Use the same fallback dialer as the main client to avoid DNS timeouts
-	// when contacting advertised listener addresses (e.g. kafka-0).
-	if len(m.Client.Brokers) > 0 {
-		config.Net.Proxy.Enable = true
-		config.Net.Proxy.Dialer = newBootstrapFallbackDialer(m.Client.Brokers[0], config.Net.DialTimeout)
+type topicPartition struct {
+	topic     string
+	partition int32
+}
+
+// fetchOffsets asks one leader for the newest or oldest offset of all given
+// partitions in a single ListOffsets request. Partitions with errors are omitted.
+func fetchOffsets(b *sarama.Broker, parts []topicPartition, at int64) map[topicPartition]int64 {
+	req := &sarama.OffsetRequest{Version: 1}
+	for _, tp := range parts {
+		req.AddBlock(tp.topic, tp.partition, at, 1)
 	}
-
-	return config
+	out := make(map[topicPartition]int64, len(parts))
+	resp, err := b.GetAvailableOffsets(req)
+	if err != nil {
+		log.Printf("GetClusterState: warning - list offsets on broker %d failed: %v", b.ID(), err)
+		return out
+	}
+	for _, tp := range parts {
+		block := resp.GetBlock(tp.topic, tp.partition)
+		if block == nil || block.Err != sarama.ErrNoError {
+			continue
+		}
+		out[tp] = block.Offset
+	}
+	return out
 }
 
 func (m *Manager) CreateTopic(topic string) error {
