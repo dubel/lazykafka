@@ -93,3 +93,14 @@ nfpms:
     dependencies:
       - git
 
+
+# Build and push the multi-arch Docker image to GHCR (requires buildx + registry login in CI)
+dockers_v2:
+  - images:
+      - ghcr.io/dubel/lazykafka
+    tags:
+      - "{{ .Tag }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64

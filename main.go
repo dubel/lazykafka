@@ -2,6 +2,8 @@ package main
 
 import (
 	_ "embed"
+	"flag"
+	"fmt"
 	"log"
 	"strings"
 
@@ -29,6 +31,13 @@ func getVersion() string {
 }
 
 func main() {
+	showVersion := flag.Bool("version", false, "print version and exit")
+	flag.Parse()
+	if *showVersion {
+		fmt.Println(getVersion())
+		return
+	}
+
 	// Setup daily log file with rotation
 	f, err := config.SetupLogging()
 	if err == nil {

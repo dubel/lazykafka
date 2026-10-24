@@ -6,6 +6,7 @@ on:
       - 'v*'
 
 permissions:
+  packages: write # Push the Docker image to GHCR with the workflow's GITHUB_TOKEN.
   contents: write # Needed for creating the release in THIS repo (if we were doing that), but vital for GoReleaser generally.
 
 jobs:
@@ -21,6 +22,19 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: stable
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6

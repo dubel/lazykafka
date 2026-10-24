@@ -1,4 +1,4 @@
-.PHONY: build run test test-integration kafka-up kafka-down demo-up demo-down demo-infra-cleanup clean publish publish-ghcr release
+.PHONY: build run test test-integration kafka-up kafka-down demo-up demo-down demo-infra-cleanup clean publish
 
 # Build the application
 build:
@@ -60,18 +60,8 @@ clean:
 test-all: test test-integration
 
 # Tag and push the current version to trigger the release pipeline
+# (CI builds binaries, packages, Homebrew formula and the GHCR Docker image)
 publish:
 	@VERSION=$$(cat current-version | tr -d '[:space:]'); \
 	echo "Publishing version: $$VERSION"; \
 	git tag $$VERSION && git push origin $$VERSION
-
-# Build and publish docker image to GHCR
-publish-ghcr:
-	@VERSION=$$(cat current-version | tr -d '[:space:]'); \
-	echo "Building and pushing Docker image to GHCR for version: $$VERSION"; \
-	docker build -t ghcr.io/dubel/lazykafka:$$VERSION -t ghcr.io/dubel/lazykafka:latest . && \
-	docker push ghcr.io/dubel/lazykafka:$$VERSION && \
-	docker push ghcr.io/dubel/lazykafka:latest
-
-# Full release: tag + push git tag (triggers CI binaries) + build & push Docker image to GHCR
-release: publish publish-ghcr
