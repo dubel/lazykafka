@@ -6,7 +6,7 @@
 set -euo pipefail
 
 BROKER="${KAFKA_BROKER:-kafka-demo:9092}"
-KAFKA_BIN="/opt/kafka/bin"
+KAFKA_BIN="${KAFKA_BIN:-/opt/kafka/bin}"
 TOPIC="contemporary-measurements-data"
 
 echo "==> Live producer waiting for broker..."

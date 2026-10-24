@@ -1,6 +1,6 @@
 # Release image, built by GoReleaser (dockers_v2) from the prebuilt binary.
 # GoReleaser places each platform's binary under $TARGETPLATFORM/ in the build context.
-FROM alpine:latest
+FROM alpine:3.24
 
 # Add ca-certificates in case Kafka connects over TLS/SSL
 RUN apk --no-cache add ca-certificates
@@ -10,6 +10,10 @@ LABEL org.opencontainers.image.source="https://github.com/dubel/lazykafka"
 
 ARG TARGETPLATFORM
 COPY $TARGETPLATFORM/lazykafka /usr/local/bin/lazykafka
+
+# Run as an unprivileged user; settings live in /home/lazykafka/.lazykafka
+RUN adduser -D lazykafka
+USER lazykafka
 
 # Command to run the executable
 ENTRYPOINT ["lazykafka"]

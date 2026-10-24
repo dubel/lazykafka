@@ -7,8 +7,10 @@ Weryfikacja: `go vet ./...` czysto, `go test -race ./...` zielone (ale `ui/` nie
 Dodatkowo uruchomiłem aplikację na lokalnym brokerze Kafka 4.0.0 (KRaft) z danymi demo z `demo/seed-demo.sh`.
 
 **Status wdrożenia (2026-10-24):** naprawione #1–#12 (#11 tylko próg 3 kolejnych błędów, bez auto-reconnectu).
-#26 częściowo: oba README zaktualizowane, release notes w `docs/release-notes/`.
-Otwarte: auto-reconnect z #11, reszta #26 oraz P2 i P3.
+#24 i #25 naprawione: `go mod tidy`, `.idea/` poza gitem, `--version` z commitem i datą, obraz Dockera budowany w CI
+przez goreleasera (multi-arch, `alpine:3.24`, użytkownik nie-root).
+#26 częściowo: oba README zaktualizowane, release notes w `docs/release-notes/`, `KAFKA_BIN` w `demo/*.sh` konfigurowalny.
+Otwarte: auto-reconnect z #11, README w src (#26), P2 oraz #21–#23.
 
 Priorytety: **P0** to błąd widoczny dla użytkownika lub ryzyko utraty danych, **P1** to poprawność i współbieżność,
 **P2** to luki funkcjonalne, **P3** to porządki i utrzymanie.

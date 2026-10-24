@@ -5,7 +5,7 @@
 set -euo pipefail
 
 BROKER="${KAFKA_BROKER:-kafka-demo:9092}"
-KAFKA_BIN="/opt/kafka/bin"
+KAFKA_BIN="${KAFKA_BIN:-/opt/kafka/bin}"
 
 echo "==> Waiting for broker to accept connections..."
 until "$KAFKA_BIN/kafka-broker-api-versions.sh" --bootstrap-server "$BROKER" >/dev/null 2>&1; do
