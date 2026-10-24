@@ -175,10 +175,7 @@ func NewTopicsPanel(app *App) *TopicsPanel {
 		ticker := time.NewTicker(300 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			p.App.ManagerMutex.RLock()
-			connected := p.App.KafkaManager != nil
-			p.App.ManagerMutex.RUnlock()
-			if connected {
+			if p.App.Manager() != nil {
 				p.LoadTopics()
 			}
 		}
@@ -286,25 +283,17 @@ func (p *TopicsPanel) selectTopic(index int) {
 func (p *TopicsPanel) LoadTopics() {
 	log.Println("LoadTopics: Starting refresh")
 
-	p.App.ManagerMutex.RLock()
-	if p.App.KafkaManager == nil {
-		p.App.ManagerMutex.RUnlock()
-		log.Println("LoadTopics: KafkaManager is nil")
+	mgr := p.App.Manager()
+	if mgr == nil {
+		log.Println("LoadTopics: not connected")
 		p.App.TviewApp.QueueUpdateDraw(func() {
 			p.showTemporaryMessage("[red]Cannot refresh Topics if we are not connected!", 5*time.Second)
 		})
 		return
 	}
-	// Keep lock held while using client
 
-	log.Println("LoadTopics: Refreshing metadata")
-	if err := p.App.KafkaManager.Client.RefreshMetadata(); err != nil {
-		log.Printf("LoadTopics: Warning - Failed to refresh metadata: %v", err)
-	}
-
-	log.Println("LoadTopics: Listing topics from client")
-	topics, err := p.App.KafkaManager.Client.ListTopics()
-	p.App.ManagerMutex.RUnlock() // Unlock after network call
+	log.Println("LoadTopics: Refreshing metadata and listing topics")
+	topics, err := mgr.ListTopics(true)
 
 	if err != nil {
 		log.Println("LoadTopics: Failed to list topics:", err)
@@ -324,13 +313,10 @@ func (p *TopicsPanel) LoadTopics() {
 }
 
 func (p *TopicsPanel) showCreateTopicModal() {
-	p.App.ManagerMutex.RLock()
-	if p.App.KafkaManager == nil {
-		p.App.ManagerMutex.RUnlock()
+	if p.App.Manager() == nil {
 		p.showTemporaryMessage("[red]Cannot alter Topics if we are not connected!", 5*time.Second)
 		return
 	}
-	p.App.ManagerMutex.RUnlock()
 
 	form := tview.NewForm().
 		AddInputField("Topic Name", "", 30, nil, nil)
@@ -346,19 +332,17 @@ func (p *TopicsPanel) showCreateTopicModal() {
 
 		if topicName != "" {
 			go func() {
-				log.Println("UI: Calling KafkaManager.CreateTopic (background)")
+				log.Println("UI: Calling CreateTopic (background)")
 
-				p.App.ManagerMutex.RLock()
-				if p.App.KafkaManager == nil {
-					p.App.ManagerMutex.RUnlock()
-					log.Println("UI: KafkaManager is nil, cannot create topic")
+				mgr := p.App.Manager()
+				if mgr == nil {
+					log.Println("UI: not connected, cannot create topic")
 					p.App.TviewApp.QueueUpdateDraw(func() {
 						p.showTemporaryMessage("[red]Cannot alter Topics if we are not connected!", 5*time.Second)
 					})
 					return
 				}
-				err := p.App.KafkaManager.CreateTopic(topicName)
-				p.App.ManagerMutex.RUnlock()
+				err := mgr.CreateTopic(topicName)
 
 				if err != nil {
 					log.Printf("UI: Failed to create topic: %v", err)
@@ -403,13 +387,10 @@ func (p *TopicsPanel) showCreateTopicModal() {
 }
 
 func (p *TopicsPanel) deleteSelectedTopic() {
-	p.App.ManagerMutex.RLock()
-	if p.App.KafkaManager == nil {
-		p.App.ManagerMutex.RUnlock()
+	if p.App.Manager() == nil {
 		p.showTemporaryMessage("[red]Cannot alter Topics if we are not connected!", 5*time.Second)
 		return
 	}
-	p.App.ManagerMutex.RUnlock()
 
 	if p.ListView.GetItemCount() == 0 {
 		return
@@ -475,10 +456,8 @@ func (p *TopicsPanel) showDeleteTopicConfirm(topicName string) {
 
 func (p *TopicsPanel) executeDeleteTopic(topicName string) {
 	go func() {
-		p.App.ManagerMutex.RLock()
-		if p.App.KafkaManager != nil {
-			err := p.App.KafkaManager.DeleteTopic(topicName)
-			p.App.ManagerMutex.RUnlock()
+		if mgr := p.App.Manager(); mgr != nil {
+			err := mgr.DeleteTopic(topicName)
 
 			if err != nil {
 				log.Printf("UI: Failed to delete topic %s: %v", topicName, err)
@@ -493,7 +472,6 @@ func (p *TopicsPanel) executeDeleteTopic(topicName string) {
 				})
 			}
 		} else {
-			p.App.ManagerMutex.RUnlock()
 			// Should not be reached if initial check passes, but good for safety
 			p.App.TviewApp.QueueUpdateDraw(func() {
 				p.showTemporaryMessage("[red]Cannot alter Topics if we are not connected!", 5*time.Second)

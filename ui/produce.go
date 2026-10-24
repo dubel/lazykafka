@@ -76,17 +76,13 @@ func NewProducePanel(app *App) *ProducePanel {
 			text := p.TextArea.GetText()
 			topic := p.CurrentTopic
 
-			p.App.ManagerMutex.RLock()
-			connected := p.App.KafkaManager != nil
-			p.App.ManagerMutex.RUnlock()
-
-			if topic == "" || !connected {
+			if topic == "" || p.App.Manager() == nil {
 				p.showTemporaryMessage("[red]No broker and topic selected - we need to connect first!", 5*time.Second)
 
 				if topic == "" {
 					log.Println("ProduceMessage: No topic selected, ignoring")
 				} else {
-					log.Println("ProduceMessage: ERROR - KafkaManager is nil")
+					log.Println("ProduceMessage: ERROR - not connected")
 				}
 				return nil
 			}
@@ -99,14 +95,12 @@ func NewProducePanel(app *App) *ProducePanel {
 			// Send off the UI goroutine: a slow or unreachable broker must not freeze input.
 			p.showTemporaryMessage("[yellow]Sending...", 15*time.Second)
 			go func() {
-				p.App.ManagerMutex.RLock()
-				mgr := p.App.KafkaManager
+				mgr := p.App.Manager()
 				err := errNotConnected
 				if mgr != nil {
 					log.Printf("ProduceMessage: Sending %d bytes to topic '%s'", len(text), topic)
 					err = mgr.ProduceMessage(topic, text)
 				}
-				p.App.ManagerMutex.RUnlock()
 
 				p.App.TviewApp.QueueUpdateDraw(func() {
 					if err != nil {

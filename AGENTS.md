@@ -6,12 +6,14 @@
 
 ## Architecture You Need First
 - UI is split into panels under `ui/`: brokers, topics, consume, produce, splash.
-- `App` (`ui/app.go`) owns shared mutable state: `KafkaManager`, `ManagerMutex`, modal mode (`InModal`), config/settings.
+- `App` (`ui/app.go`) owns shared mutable state: the current Kafka connection (`App.Manager()`), modal mode (`InModal`), config/settings.
 - Kafka boundary is `kafka/manager.go` + `kafka/client.go`; UI should call manager methods, not `sarama` directly.
 - Persistence boundary is `config/config.go` and writes to `~/.lazykafka/{brokers.json,settings.json,lazykafka.log}`.
 
 ## Critical Concurrency / UI Rules
-- Guard all access to `App.KafkaManager` with `ManagerMutex` (`RLock` for read operations, `Lock` for replacement/close).
+- Get the connection with `App.Manager()` (lock-free `atomic.Pointer`; nil when disconnected). Snapshot it once per operation and use that pointer; never hold a lock across a network call.
+- Replace or drop the connection only via `manager.Swap` / `CompareAndSwap` in `ui/app.go`, then `Close()` the old one. `kafka.Manager.Close()` returns immediately and frees clients after in-flight calls finish; later calls return `kafka.ErrManagerClosed`.
+- Every `kafka.Manager` method that touches the shared client must `acquire()`/`release()`.
 - Only mutate UI from `QueueUpdateDraw(...)` when called from goroutines (examples: `ui/topics.go`, `ui/consume.go`, `ui/brokers.go`).
 - Topic consumption is cancel-driven: `ConsumePanel.cancelFunc` + `context.WithCancel` (`ui/consume.go`); always stop prior consumer before starting a new one.
 - `ConnectToBroker` resets consume/produce state before replacing manager (`ui/app.go`); preserve that order when editing connection flow.

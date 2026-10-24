@@ -6,8 +6,9 @@ Zakres: `main.go`, `kafka/`, `config/`, `ui/`, `demo/`, `Dockerfile`, `.goreleas
 Weryfikacja: `go vet ./...` czysto, `go test -race ./...` zielone (ale `ui/` nie ma testów jednostkowych).
 Dodatkowo uruchomiłem aplikację na lokalnym brokerze Kafka 4.0.0 (KRaft) z danymi demo z `demo/seed-demo.sh`.
 
-**Status wdrożenia (2026-10-24):** naprawione #1–#7 oraz #9–#12 (#11 tylko próg 3 kolejnych błędów, bez auto-reconnectu).
-Otwarte: #8 (locki przez operacje sieciowe), auto-reconnect z #11 oraz cały P2 i P3.
+**Status wdrożenia (2026-10-24):** naprawione #1–#12 (#11 tylko próg 3 kolejnych błędów, bez auto-reconnectu).
+#26 częściowo: oba README zaktualizowane, release notes w `docs/release-notes/`.
+Otwarte: auto-reconnect z #11, reszta #26 oraz P2 i P3.
 
 Priorytety: **P0** to błąd widoczny dla użytkownika lub ryzyko utraty danych, **P1** to poprawność i współbieżność,
 **P2** to luki funkcjonalne, **P3** to porządki i utrzymanie.

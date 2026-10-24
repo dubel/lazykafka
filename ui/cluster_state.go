@@ -50,9 +50,7 @@ func (p *BrokersPanel) showClusterStateOnPage(initialPage int) {
 	p.App.TviewApp.SetRoot(loading, true)
 
 	go func() {
-		p.App.ManagerMutex.RLock()
-		mgr := p.App.KafkaManager
-		p.App.ManagerMutex.RUnlock()
+		mgr := p.App.Manager()
 
 		if mgr == nil {
 			p.App.TviewApp.QueueUpdateDraw(func() {
@@ -491,9 +489,7 @@ func (p *BrokersPanel) executeDeleteConsumerGroup(groupName string) {
 	p.App.TviewApp.SetRoot(loading, true)
 
 	go func() {
-		p.App.ManagerMutex.RLock()
-		mgr := p.App.KafkaManager
-		p.App.ManagerMutex.RUnlock()
+		mgr := p.App.Manager()
 
 		if mgr == nil {
 			p.App.TviewApp.QueueUpdateDraw(func() {

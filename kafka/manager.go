@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -9,9 +10,21 @@ import (
 	"github.com/IBM/sarama"
 )
 
+// ErrManagerClosed is returned by operations started after Close.
+var ErrManagerClosed = errors.New("kafka connection closed")
+
+// Manager owns one broker connection. It is safe for concurrent use and may be
+// closed while operations are in flight: Close returns immediately, new
+// operations fail with ErrManagerClosed, and the underlying clients are closed
+// once the in-flight operations have finished. Callers therefore never need to
+// hold a lock across network calls to keep the manager alive.
 type Manager struct {
 	Client   *Client
 	Producer sarama.SyncProducer
+
+	mu       sync.Mutex
+	closed   bool
+	inflight sync.WaitGroup
 }
 
 // BrokerInfo holds per-broker metadata for the cluster state view.
@@ -79,16 +92,74 @@ func NewManager(brokers []string) (*Manager, error) {
 	}, nil
 }
 
+// acquire registers an in-flight operation. It returns false once the manager
+// is closed; on true the caller must call release when done.
+func (m *Manager) acquire() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return false
+	}
+	m.inflight.Add(1)
+	return true
+}
+
+func (m *Manager) release() {
+	m.inflight.Done()
+}
+
+// Close marks the manager closed and returns without waiting. Clients are
+// closed in the background after in-flight operations finish (they may run
+// until their network timeout when the broker is unreachable).
 func (m *Manager) Close() {
-	if m.Producer != nil {
-		m.Producer.Close()
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return
 	}
-	if m.Client != nil {
-		m.Client.Close()
+	m.closed = true
+	m.mu.Unlock()
+
+	go func() {
+		m.inflight.Wait()
+		if m.Producer != nil {
+			m.Producer.Close()
+		}
+		if m.Client != nil {
+			m.Client.Close()
+		}
+	}()
+}
+
+// ListTopics returns topic names, refreshing cluster metadata first when refresh is set.
+// A failed refresh is logged and the cached metadata is used.
+func (m *Manager) ListTopics(refresh bool) ([]string, error) {
+	if !m.acquire() {
+		return nil, ErrManagerClosed
 	}
+	defer m.release()
+	if refresh {
+		if err := m.Client.RefreshMetadata(); err != nil {
+			log.Printf("Manager.ListTopics: warning - failed to refresh metadata: %v", err)
+		}
+	}
+	return m.Client.ListTopics()
+}
+
+// CheckConnection verifies the broker is still reachable.
+func (m *Manager) CheckConnection() error {
+	if !m.acquire() {
+		return ErrManagerClosed
+	}
+	defer m.release()
+	return m.Client.CheckConnection()
 }
 
 func (m *Manager) ProduceMessage(topic, value string) error {
+	if !m.acquire() {
+		return ErrManagerClosed
+	}
+	defer m.release()
 	msg := &sarama.ProducerMessage{
 		Topic: topic,
 		Value: sarama.StringEncoder(value),
@@ -116,18 +187,25 @@ func (m *Manager) ConsumeTopic(ctx context.Context, topic string, fromBeginning 
 	// long-poll on the broker, and Kafka answers requests on one connection in
 	// order, so sharing the main client would stall metadata, offset and
 	// health-check requests behind every fetch.
+	// Only the partition lookup uses the shared client; the consumer below has
+	// its own, so a long-running consumption does not delay Close.
+	if !m.acquire() {
+		sendErr(ErrManagerClosed)
+		return
+	}
+	partitions, err := m.Client.GetPartitions(topic)
+	m.release()
+	if err != nil {
+		sendErr(err)
+		return
+	}
+
 	consumer, err := sarama.NewConsumer(m.Client.Brokers, newSaramaConfig(m.Client.Brokers))
 	if err != nil {
 		sendErr(err)
 		return
 	}
 	defer consumer.Close()
-
-	partitions, err := m.Client.GetPartitions(topic)
-	if err != nil {
-		sendErr(err)
-		return
-	}
 
 	var wg sync.WaitGroup
 
@@ -177,6 +255,11 @@ func (m *Manager) ConsumeTopic(ctx context.Context, topic string, fromBeginning 
 
 // GetClusterState returns a read-only snapshot of cluster health and consumer group lag.
 func (m *Manager) GetClusterState() (*ClusterState, error) {
+	if !m.acquire() {
+		return nil, ErrManagerClosed
+	}
+	defer m.release()
+
 	log.Println("Manager.GetClusterState: fetching cluster metadata")
 
 	admin, err := sarama.NewClusterAdmin(m.Client.Brokers, m.getAdminConfig())
@@ -454,6 +537,11 @@ func fetchOffsets(b *sarama.Broker, parts []topicPartition, at int64) map[topicP
 }
 
 func (m *Manager) CreateTopic(topic string) error {
+	if !m.acquire() {
+		return ErrManagerClosed
+	}
+	defer m.release()
+
 	log.Printf("Manager.CreateTopic: Starting creation of topic '%s'", topic)
 
 	// Use a separate admin client to avoid closing the shared client
@@ -486,6 +574,11 @@ func (m *Manager) CreateTopic(topic string) error {
 }
 
 func (m *Manager) DeleteTopic(topic string) error {
+	if !m.acquire() {
+		return ErrManagerClosed
+	}
+	defer m.release()
+
 	log.Printf("Manager.DeleteTopic: Starting deletion of topic '%s'", topic)
 
 	// Use a separate admin client to avoid closing the shared client
@@ -515,6 +608,11 @@ func (m *Manager) DeleteTopic(topic string) error {
 }
 
 func (m *Manager) DeleteConsumerGroup(group string) error {
+	if !m.acquire() {
+		return ErrManagerClosed
+	}
+	defer m.release()
+
 	log.Printf("Manager.DeleteConsumerGroup: Starting deletion of group '%s'", group)
 
 	// Use a separate admin client to avoid closing the shared client

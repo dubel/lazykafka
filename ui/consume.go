@@ -130,10 +130,9 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 		flex.SetTitle(fmt.Sprintf("Consume (F3) - %s (%s)", topic, status))
 	}
 
-	p.App.ManagerMutex.RLock()
-	if p.App.KafkaManager == nil {
-		p.App.ManagerMutex.RUnlock()
-		log.Println("StartConsuming: ERROR - KafkaManager is nil, cannot consume")
+	mgr := p.App.Manager()
+	if mgr == nil {
+		log.Println("StartConsuming: ERROR - not connected, cannot consume")
 		return
 	}
 
@@ -146,8 +145,7 @@ func (p *ConsumePanel) StartConsuming(topic string) {
 	messages := make(chan string)
 	errors := make(chan error)
 
-	go p.App.KafkaManager.ConsumeTopic(ctx, topic, p.FromBeginning, messages, errors)
-	p.App.ManagerMutex.RUnlock()
+	go mgr.ConsumeTopic(ctx, topic, p.FromBeginning, messages, errors)
 
 	log.Printf("StartConsuming: Started consuming messages from topic: %s", topic)
 

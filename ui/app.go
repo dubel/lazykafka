@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dubel/lazykafka/config"
@@ -25,8 +27,11 @@ type App struct {
 	ConsumePanel *ConsumePanel
 	ProducePanel *ProducePanel
 
-	KafkaManager       *kafka.Manager
-	ManagerMutex       sync.RWMutex
+	// manager is the current connection (nil when disconnected). It is read
+	// lock-free from any goroutine, including the UI goroutine; a closed
+	// manager just returns kafka.ErrManagerClosed, so no lock is held across
+	// network calls.
+	manager            atomic.Pointer[kafka.Manager]
 	InModal            bool
 	Version            string
 	healthMu           sync.Mutex // guards healthCheckCancel; connect runs off the UI goroutine
@@ -90,6 +95,11 @@ func NewApp(version string) *App {
 	app.setupNavigation()
 
 	return app
+}
+
+// Manager returns the current Kafka connection, or nil when not connected.
+func (a *App) Manager() *kafka.Manager {
+	return a.manager.Load()
 }
 
 func (a *App) Run() error {
@@ -203,13 +213,12 @@ func (a *App) ConnectToBroker(broker string) error {
 	})
 	log.Println("ConnectToBroker: Cleared produce panel")
 
-	a.ManagerMutex.Lock()
-	if a.KafkaManager != nil {
+	// Detach the old connection first so nothing new starts on it. Close does
+	// not wait for operations still running against a hung broker.
+	if old := a.manager.Swap(nil); old != nil {
 		log.Println("ConnectToBroker: Closing existing Kafka manager")
-		a.KafkaManager.Close()
-		a.KafkaManager = nil
+		old.Close()
 	}
-	a.ManagerMutex.Unlock()
 
 	log.Printf("ConnectToBroker: Creating new Kafka manager for broker: %s", broker)
 	manager, err := kafka.NewManager([]string{broker})
@@ -218,12 +227,13 @@ func (a *App) ConnectToBroker(broker string) error {
 		return err
 	}
 
-	a.ManagerMutex.Lock()
-	a.KafkaManager = manager
-	a.ManagerMutex.Unlock()
+	// A concurrent connect may have stored its manager meanwhile; last one wins.
+	if old := a.manager.Swap(manager); old != nil {
+		old.Close()
+	}
 
 	// Monitor the new connection in the background.
-	a.startHealthCheck(broker)
+	a.startHealthCheck(broker, manager)
 
 	log.Println("ConnectToBroker: Successfully connected, loading topics")
 	a.TopicsPanel.LoadTopics()
@@ -277,7 +287,7 @@ func (a *App) showSplashScreen() {
 
 // startHealthCheck launches a background goroutine that pings the connected
 // broker every 5 seconds.  On the first failure it calls handleConnectionLost.
-func (a *App) startHealthCheck(brokerAddress string) {
+func (a *App) startHealthCheck(brokerAddress string, mgr *kafka.Manager) {
 	a.stopHealthCheck() // ensure no previous check is still running
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -292,19 +302,19 @@ func (a *App) startHealthCheck(brokerAddress string) {
 		for {
 			select {
 			case <-ticker.C:
-				a.ManagerMutex.RLock()
-				mgr := a.KafkaManager
-				a.ManagerMutex.RUnlock()
-				if mgr == nil {
-					return // manager already gone, nothing to monitor
+				if a.Manager() != mgr {
+					return // disconnected or replaced, nothing to monitor
 				}
-				if err := mgr.Client.CheckConnection(); err != nil {
+				if err := mgr.CheckConnection(); err != nil {
+					if errors.Is(err, kafka.ErrManagerClosed) {
+						return
+					}
 					failures++
 					log.Printf("HealthCheck: check %d/%d for %s failed: %v",
 						failures, healthCheckFailuresBeforeDisconnect, brokerAddress, err)
 					if failures >= healthCheckFailuresBeforeDisconnect {
 						log.Printf("HealthCheck: connection to %s lost", brokerAddress)
-						a.handleConnectionLost(brokerAddress)
+						a.handleConnectionLost(brokerAddress, mgr)
 						return
 					}
 					continue
@@ -329,16 +339,13 @@ func (a *App) stopHealthCheck() {
 
 // handleConnectionLost tears down the broken connection, clears all dependent
 // UI state, and shows a dismissible modal alerting the user.
-func (a *App) handleConnectionLost(brokerAddress string) {
-	// Guard against duplicate invocations.
-	a.ManagerMutex.Lock()
-	if a.KafkaManager == nil {
-		a.ManagerMutex.Unlock()
+func (a *App) handleConnectionLost(brokerAddress string, mgr *kafka.Manager) {
+	// Only tear down the connection that actually failed: if the user has
+	// reconnected meanwhile, the new manager must stay.
+	if !a.manager.CompareAndSwap(mgr, nil) {
 		return
 	}
-	a.KafkaManager.Close()
-	a.KafkaManager = nil
-	a.ManagerMutex.Unlock()
+	mgr.Close()
 
 	// Stop any active consumption (safe to call from a goroutine).
 	a.ConsumePanel.StopConsuming()

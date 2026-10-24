@@ -16,13 +16,10 @@ import (
 
 // openFilePicker checks connection first, then opens the file picker modal.
 func (p *ProducePanel) openFilePicker() {
-	p.App.ManagerMutex.RLock()
-	if p.CurrentTopic == "" || p.App.KafkaManager == nil {
-		p.App.ManagerMutex.RUnlock()
+	if p.CurrentTopic == "" || p.App.Manager() == nil {
 		p.showTemporaryMessage("[red]No broker and topic selected - we need to connect first!", 5*time.Second)
 		return
 	}
-	p.App.ManagerMutex.RUnlock()
 
 	// Determine starting directory: cached or home.
 	startDir := p.App.Settings.LastFilePickerDir
@@ -220,20 +217,19 @@ func (p *ProducePanel) publishFileContent(filePath, parentDir string) {
 		log.Printf("PublishFile: failed to save settings: %v", err)
 	}
 
-	// Publish in background.
+	// Publish in background. Capture the topic here: CurrentTopic belongs to the UI goroutine.
+	topic := p.CurrentTopic
 	go func() {
-		p.App.ManagerMutex.RLock()
-		if p.App.KafkaManager == nil || p.CurrentTopic == "" {
-			p.App.ManagerMutex.RUnlock()
+		mgr := p.App.Manager()
+		if mgr == nil || topic == "" {
 			p.App.TviewApp.QueueUpdateDraw(func() {
 				p.showTemporaryMessage("[red]No broker/topic — cannot publish!", 5*time.Second)
 			})
 			return
 		}
 		log.Printf("PublishFile: Sending file %s content to topic '%s' (%d bytes)",
-			filepath.Base(filePath), p.CurrentTopic, len(text))
-		err := p.App.KafkaManager.ProduceMessage(p.CurrentTopic, text)
-		p.App.ManagerMutex.RUnlock()
+			filepath.Base(filePath), topic, len(text))
+		err := mgr.ProduceMessage(topic, text)
 
 		if err != nil {
 			log.Printf("PublishFile: ERROR - Failed to produce: %v", err)
@@ -241,7 +237,7 @@ func (p *ProducePanel) publishFileContent(filePath, parentDir string) {
 				p.showTemporaryMessage("[red]Failed to publish file content!", 5*time.Second)
 			})
 		} else {
-			log.Printf("PublishFile: Successfully sent file content to topic '%s'", p.CurrentTopic)
+			log.Printf("PublishFile: Successfully sent file content to topic '%s'", topic)
 			p.App.TviewApp.QueueUpdateDraw(func() {
 				p.showTemporaryMessage(
 					fmt.Sprintf("[green]File \"%s\" published!", filepath.Base(filePath)),
